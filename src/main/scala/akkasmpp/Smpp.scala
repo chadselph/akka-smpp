@@ -1,0 +1,6 @@
+package akkasmpp
+
+trait Smpp {
+
+
+}
