@@ -148,7 +148,6 @@ case class GenericNack(commandStatus: CommandStatus, sequenceNumber: SmppTypes.I
  * Submits a short message from the ESME to the SMSC
  */
 case class SubmitSm(
-                     commandStatus: CommandStatus,
                      sequenceNumber: SmppTypes.Integer,
                      serviceType: ServiceType,
                      sourceAddrTon: TypeOfNumber,
@@ -169,13 +168,12 @@ case class SubmitSm(
                      smLength: SmppTypes.Integer,
                      shortMessage: SmppTypes.COctetString,
                      tlvs: List[Tlv]
-                     ) extends Pdu(CommandId.submit_sm) with SmLike
+                     ) extends Pdu(CommandId.submit_sm) with NullCommandStatus with SmLike
 
 case class SubmitSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: SmppTypes.COctetString)
   extends Pdu(CommandId.submit_sm_resp) with SmRespLike
 
 case class SubmitMulti(
-                        commandStatus: CommandStatus,
                         sequenceNumber: SmppTypes.Integer,
                         serviceType: ServiceType,
                         sourceAddrTon: TypeOfNumber,
@@ -195,7 +193,7 @@ case class SubmitMulti(
                         smLength: SmppTypes.Integer,
                         shortMessage: SmppTypes.OctetString,
                         tlvs: List[Tlv]
-                        ) extends Pdu(CommandId.submit_multi) with WritePdu.SubmitMultiWriter
+                        ) extends Pdu(CommandId.submit_multi) with NullCommandStatus with WritePdu.SubmitMultiWriter
 
 case class SubmitMultiResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
                             messageId: SmppTypes.COctetString, noUnsuccess: Byte,
@@ -203,7 +201,6 @@ case class SubmitMultiResp(commandStatus: CommandStatus, sequenceNumber: SmppTyp
   extends Pdu(CommandId.submit_sm_resp) with WritePdu.SubmitMultiRespWriter
 
 case class DeliverSm(
-                     commandStatus: CommandStatus,
                      sequenceNumber: SmppTypes.Integer,
                      serviceType: ServiceType,
                      sourceAddrTon: TypeOfNumber,
@@ -224,7 +221,7 @@ case class DeliverSm(
                      smLength: SmppTypes.Integer,
                      shortMessage: SmppTypes.OctetString,
                      tlvs: List[Tlv]
-                     ) extends Pdu(CommandId.submit_sm) with SmLike
+                     ) extends Pdu(CommandId.submit_sm) with NullCommandStatus with SmLike
 
 case class DeliverSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: SmppTypes.COctetString)
   extends Pdu(CommandId.submit_sm_resp) with SmRespLike
