@@ -6,6 +6,7 @@ import java.net.InetSocketAddress
 import akkasmpp.protocol.{EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Basic ESME behaviors
@@ -18,6 +19,7 @@ class SmppClient(val serverAddress: InetSocketAddress) extends Actor with ActorL
   import context.system
 
   val manager = IO(Tcp)
+  val sequenceNumberGen = new AtomicInteger
 
   log.debug(s"Connecting to server at $serverAddress")
   manager ! Connect(serverAddress, timeout = Some(3.seconds))
@@ -39,7 +41,7 @@ class SmppClient(val serverAddress: InetSocketAddress) extends Actor with ActorL
       context.watch(handler)
 
       sender ! Tcp.Register(handler)
-      handler ! pipeline.Command(BindTransmitter(42, 0x1, "smppclient1", "password", None, 0x34, TypeOfNumber.International, NumericPlanIndicator.E164))
+      handler ! pipeline.Command(BindTransmitter(0x1, "smppclient1", "password", None, 0x34, TypeOfNumber.International, NumericPlanIndicator.E164))
       context.become(awaitBindResp(pipeline, handler))
   }
 
@@ -47,7 +49,7 @@ class SmppClient(val serverAddress: InetSocketAddress) extends Actor with ActorL
     case wire.Event(p: Pdu) =>
       log.info(s"Got a pdu $p")
       connection ! wire.Command(
-        EnquireLink(16, 4)
+        EnquireLink(sequenceNumberGen.incrementAndGet())
       )
     case x => log.info(s"unexpected event! $x")
 

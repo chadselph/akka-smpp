@@ -13,18 +13,41 @@ object WritePdu {
   implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
   implicit val charset = java.nio.charset.Charset.forName("ASCII")
 
-  def writeHeader(p: Pdu) = {
-    val bsb = new ByteStringBuilder
-    bsb.putInt(p.commandLength)
-    bsb.putCommandId(p.commandId)
-    bsb.putCommandStatus(p.commandStatus)
-    bsb.putInt(p.sequenceNumber)
+  trait PduWriter { this: Pdu =>
+    def writeBody(b: ByteStringBuilder): ByteString
+    def toByteString = {
+      val bsb = writeHeader()
+      val bsbBody = writeBody(bsb)
+      buildAndAddLength(bsbBody)
+
+    }
+    /**
+     * Writes the header (except length)
+     */
+    private def writeHeader() = {
+      val bsb = new ByteStringBuilder
+      bsb.putCommandId(commandId)
+      bsb.putCommandStatus(commandStatus)
+      bsb.putInt(sequenceNumber)
+      bsb
+    }
+    /**
+     * add the length
+     * @param bsb ByteString with header (except length) and body of PDU
+     * @return
+     */
+    private def buildAndAddLength(bsb: ByteString) = {
+      val len = new ByteStringBuilder().putInt(bsb.length + 4).result()
+      len.concat(bsb)
+    }
   }
 
-  trait BindWriter { this: BindLike =>
+  def writeHeader(p: Pdu) = {
+  }
 
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait BindWriter extends PduWriter { this: BindLike =>
+
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putCOctetString(systemId)
       bsb.putCOctetString(password)
       bsb.putCOctetString(systemType.getOrElse(""))
@@ -37,9 +60,8 @@ object WritePdu {
     }
   }
 
-  trait BindRespWriter { this: BindRespLike =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait BindRespWriter extends PduWriter { this: BindRespLike =>
+    def writeBody(bsb: ByteStringBuilder) = {
       if (this.commandStatus.id == 0) {
         /* only return body for command_status 0 */
         bsb.putCOctetString(systemId.getOrElse(Array.empty))
@@ -51,9 +73,8 @@ object WritePdu {
     }
 
   }
-  trait OutbindWriter { this: Outbind =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait OutbindWriter extends PduWriter { this: Outbind =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putCOctetString(systemId)
       bsb.putCOctetString(password)
       bsb.result()
@@ -62,13 +83,12 @@ object WritePdu {
   }
 
 
-  trait HeaderOnlyWriter { this: Pdu =>
-    def toByteString = writeHeader(this).result()
+  trait HeaderOnlyWriter extends PduWriter { this: Pdu =>
+    def writeBody(bsb: ByteStringBuilder) = bsb.result()
   }
 
-  trait SmWriter { this: SmLike =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait SmWriter extends PduWriter { this: SmLike =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putServiceType(serviceType)
       bsb.putTypeOfNumber(sourceAddrTon)
       bsb.putNumberPlanIndicator(sourceAddrNpi)
@@ -94,9 +114,8 @@ object WritePdu {
     }
   }
 
-  trait SmRespWriter { this: SmRespLike =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait SmRespWriter extends PduWriter { this: SmRespLike =>
+    def writeBody(bsb: ByteStringBuilder) = {
       if (commandStatus.id == 0) {
         bsb.putCOctetString(messageId)
       }
@@ -104,9 +123,8 @@ object WritePdu {
     }
   }
 
-  trait SubmitMultiWriter { this: SubmitMulti =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait SubmitMultiWriter extends PduWriter { this: SubmitMulti =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putServiceType(serviceType)
       bsb.putTypeOfNumber(sourceAddrTon)
       bsb.putNumberPlanIndicator(sourceAddrNpi)
@@ -135,9 +153,8 @@ object WritePdu {
     }
   }
 
-  trait SubmitMultiRespWriter { this: SubmitMultiResp =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait SubmitMultiRespWriter extends PduWriter { this: SubmitMultiResp =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putCOctetString(messageId)
       bsb.putByte(noUnsuccess)
       for ((ton, npi, addr, err) <- unsuccessSmes) {
@@ -150,9 +167,8 @@ object WritePdu {
     }
   }
 
-  trait DataSmWriter { this: DataSm =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait DataSmWriter extends PduWriter { this: DataSm =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putServiceType(serviceType)
       bsb.putTypeOfNumber(sourceAddrTon)
       bsb.putNumberPlanIndicator(sourceAddrNpi)
@@ -170,9 +186,8 @@ object WritePdu {
     }
   }
 
-  trait DataSmRespWriter { this: DataSmResp =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait DataSmRespWriter extends PduWriter { this: DataSmResp =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putCOctetString(messageId)
       for (tlv <- tlvs) {
         bsb.putTlv(tlv)
@@ -181,9 +196,8 @@ object WritePdu {
     }
   }
 
-  trait QuerySmWriter { this: QuerySm =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait QuerySmWriter extends PduWriter { this: QuerySm =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putCOctetString(messageId)
       bsb.putTypeOfNumber(sourceAddrTon)
       bsb.putNumberPlanIndicator(sourceAddrNpi)
@@ -192,9 +206,8 @@ object WritePdu {
     }
   }
 
-  trait QuerySmRespWriter { this: QuerySmResp =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait QuerySmRespWriter extends PduWriter { this: QuerySmResp =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putCOctetString(messageId)
       bsb.putTime(finalDate)
       bsb.putMessageState(messageState)
@@ -203,9 +216,8 @@ object WritePdu {
     }
   }
 
-  trait CancelSmWriter { this: CancelSm =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait CancelSmWriter extends PduWriter { this: CancelSm =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putServiceType(serviceType)
       bsb.putCOctetString(messageId)
       bsb.putTypeOfNumber(sourceAddrTon)
@@ -218,9 +230,8 @@ object WritePdu {
     }
   }
 
-  trait ReplaceSmWriter { this: ReplaceSm =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait ReplaceSmWriter extends PduWriter { this: ReplaceSm =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putCOctetString(messageId)
       bsb.putTypeOfNumber(sourceAddrTon)
       bsb.putNumberPlanIndicator(sourceAddrNpi)
@@ -235,9 +246,8 @@ object WritePdu {
     }
   }
 
-  trait AlertNotificationWriter { this: AlertNotification =>
-    def toByteString = {
-      val bsb = writeHeader(this)
+  trait AlertNotificationWriter extends PduWriter { this: AlertNotification =>
+    def writeBody(bsb: ByteStringBuilder) = {
       bsb.putTypeOfNumber(sourceAddrTon)
       bsb.putNumberPlanIndicator(sourceAddrNpi)
       bsb.putCOctetString(sourceAddr)
