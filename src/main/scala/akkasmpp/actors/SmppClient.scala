@@ -3,7 +3,7 @@ package akkasmpp.actors
 import akka.actor.{ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
 
-import akkasmpp.protocol.{EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
 import java.util.concurrent.atomic.AtomicInteger
@@ -24,7 +24,7 @@ class SmppClient(val serverAddress: InetSocketAddress) extends Actor with ActorL
   log.debug(s"Connecting to server at $serverAddress")
   manager ! Connect(serverAddress, timeout = Some(3.seconds))
 
-  override def postStop = {
+  override def postStop() = {
     manager ! Close
   }
 
@@ -41,7 +41,7 @@ class SmppClient(val serverAddress: InetSocketAddress) extends Actor with ActorL
       context.watch(handler)
 
       sender ! Tcp.Register(handler)
-      handler ! pipeline.Command(BindTransmitter(0x1, "smppclient1", "password", None, 0x34, TypeOfNumber.International, NumericPlanIndicator.E164))
+      handler ! pipeline.Command(BindTransmitter(0x1, "smppclient1".getBytes, "password".getBytes, "".getBytes, 0x34, TypeOfNumber.International, NumericPlanIndicator.E164))
       context.become(awaitBindResp(pipeline, handler))
   }
 
@@ -50,6 +50,13 @@ class SmppClient(val serverAddress: InetSocketAddress) extends Actor with ActorL
       log.info(s"Got a pdu $p")
       connection ! wire.Command(
         EnquireLink(sequenceNumberGen.incrementAndGet())
+      )
+      connection ! wire.Command(
+        SubmitSm(sequenceNumberGen.incrementAndGet(), ServiceType.Default, TypeOfNumber.International, NumericPlanIndicator.E164,
+                 "15094302095".getBytes, TypeOfNumber.International, NumericPlanIndicator.E164, "+15094302095".getBytes,
+                 EsmClass(EsmClass.MessagingMode.Default, EsmClass.MessageType.NormalMessage), 0x34, Priority.Level0,
+                 NullTime, NullTime, RegisteredDelivery(), false, DataCodingScheme.SmscDefaultAlphabet,
+                 0x0, 10, "0123456789".getBytes, Nil)
       )
     case x => log.info(s"unexpected event! $x")
 

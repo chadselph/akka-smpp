@@ -8,3 +8,6 @@ resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/release
  
 libraryDependencies +=
   "com.typesafe.akka" %% "akka-actor" % "2.3-M2"
+
+libraryDependencies += "org.scalatest" %% "scalatest" % "2.0" % "test"
+

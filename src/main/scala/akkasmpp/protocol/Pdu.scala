@@ -10,12 +10,11 @@ import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
 import akkasmpp.protocol.ServiceType.ServiceType
 import akkasmpp.protocol.Priority.Priority
-import akkasmpp.protocol.RegisteredDelivery.RegisteredDelivery
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
-import akkasmpp.protocol.EsmClass.EsmClass
 import akkasmpp.protocol.MessageState.MessageState
 import akkasmpp.protocol.bytestrings.WritePdu
 import akkasmpp.protocol.bytestrings.WritePdu.DataSmRespWriter
+import akkasmpp.protocol.SmppTypes.COctetString
 
 
 object Pdu {
@@ -48,16 +47,16 @@ trait NullCommandStatus {
 }
 
 trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter {
-  def systemId: String
-  def password: String
-  def systemType: Option[String]
+  def systemId: SmppTypes.COctetString
+  def password: SmppTypes.COctetString
+  def systemType: SmppTypes.COctetString
   def interfaceVersion: Byte
   def addrTon: TypeOfNumber
   def addrNpi: NumericPlanIndicator
 }
 
 trait BindRespLike extends Pdu with WritePdu.BindRespWriter {
-  def systemId: Option[SmppTypes.COctetString]
+  def systemId: SmppTypes.COctetString
   def scInterfaceVersion: Option[Tlv]
 }
 
@@ -85,40 +84,40 @@ trait SmLike extends Pdu with WritePdu.SmWriter {
 }
 
 trait SmRespLike extends Pdu with WritePdu.SmRespWriter {
-  def messageId: SmppTypes.COctetString
+  def messageId: Option[SmppTypes.COctetString]
 }
 
 /**
  * Binds in transmit only mode
  */
-case class BindTransmitter(sequenceNumber: SmppTypes.Integer, systemId: String, password: String,
-                           systemType: Option[String], interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
+case class BindTransmitter(sequenceNumber: SmppTypes.Integer, systemId: SmppTypes.COctetString, password: SmppTypes.COctetString,
+                           systemType: SmppTypes.COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
   extends Pdu(CommandId.bind_transmitter) with BindLike
 
 case class BindTransmitterResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                               systemId: Option[SmppTypes.COctetString], scInterfaceVersion: Option[Tlv])
+                               systemId: SmppTypes.COctetString, scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_transmitter_resp) with BindRespLike
 
 /**
  * Binds in receive only mode
  */
-case class BindReceiver(sequenceNumber: SmppTypes.Integer, systemId: String, password: String,
-                        systemType: Option[String], interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
+case class BindReceiver(sequenceNumber: SmppTypes.Integer, systemId: SmppTypes.COctetString, password: SmppTypes.COctetString,
+                        systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
   extends Pdu(CommandId.bind_receiver) with BindLike
 
 case class BindReceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                               systemId: Option[SmppTypes.COctetString], scInterfaceVersion: Option[Tlv])
+                            systemId: SmppTypes.COctetString, scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_receiver_resp) with BindRespLike
 
 /**
  * Binds in transmit and receiver mode
  */
-case class BindTransceiver(sequenceNumber: SmppTypes.Integer, systemId: String, password: String,
-                        systemType: Option[String], interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
+case class BindTransceiver(sequenceNumber: SmppTypes.Integer, systemId: SmppTypes.COctetString, password: SmppTypes.COctetString,
+                        systemType: SmppTypes.COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
   extends Pdu(CommandId.bind_transceiver) with BindLike
 
 case class BindTransceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                            systemId: Option[SmppTypes.COctetString], scInterfaceVersion: Option[Tlv])
+                            systemId: SmppTypes.COctetString, scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_transceiver_resp) with BindRespLike
 
 /**
@@ -170,7 +169,7 @@ case class SubmitSm(
                      tlvs: List[Tlv]
                      ) extends Pdu(CommandId.submit_sm) with NullCommandStatus with SmLike
 
-case class SubmitSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: SmppTypes.COctetString)
+case class SubmitSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: Option[SmppTypes.COctetString])
   extends Pdu(CommandId.submit_sm_resp) with SmRespLike
 
 case class SubmitMulti(
@@ -223,7 +222,7 @@ case class DeliverSm(
                      tlvs: List[Tlv]
                      ) extends Pdu(CommandId.submit_sm) with NullCommandStatus with SmLike
 
-case class DeliverSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: SmppTypes.COctetString)
+case class DeliverSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: Option[SmppTypes.COctetString])
   extends Pdu(CommandId.submit_sm_resp) with SmRespLike
 
 case class DataSm(sequenceNumber: SmppTypes.Integer, serviceType: ServiceType,

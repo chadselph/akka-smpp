@@ -50,7 +50,7 @@ object WritePdu {
     def writeBody(bsb: ByteStringBuilder) = {
       bsb.putCOctetString(systemId)
       bsb.putCOctetString(password)
-      bsb.putCOctetString(systemType.getOrElse(""))
+      bsb.putCOctetString(systemType)
       bsb.putByte(interfaceVersion)
       bsb.putTypeOfNumber(addrTon)
       bsb.putNumberPlanIndicator(addrNpi)
@@ -64,7 +64,7 @@ object WritePdu {
     def writeBody(bsb: ByteStringBuilder) = {
       if (this.commandStatus.id == 0) {
         /* only return body for command_status 0 */
-        bsb.putCOctetString(systemId.getOrElse(Array.empty))
+        bsb.putCOctetString(systemId)
         if (scInterfaceVersion.isDefined) {
           bsb.putTlv(scInterfaceVersion.get)
         }
@@ -116,8 +116,8 @@ object WritePdu {
 
   trait SmRespWriter extends PduWriter { this: SmRespLike =>
     def writeBody(bsb: ByteStringBuilder) = {
-      if (commandStatus.id == 0) {
-        bsb.putCOctetString(messageId)
+      messageId.foreach { mid =>
+        bsb.putCOctetString(mid)
       }
       bsb.result()
     }

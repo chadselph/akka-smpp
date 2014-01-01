@@ -1,9 +1,33 @@
+
+
 package akkasmpp.protocol
+
+import akkasmpp.protocol.EsmClass.MessagingMode
+import akkasmpp.protocol.RegisteredDelivery.SmscDelivery.SmscDelivery
+import akkasmpp.protocol.RegisteredDelivery.SmeAcknowledgement.SmeAcknowledgement
+import akkasmpp.protocol.RegisteredDelivery.IntermediateNotification.IntermediateNotification
 
 object SmppTypes {
   type OctetString = Array[Byte] // close enough...
   type COctetString = Array[Byte] // null terminated string
   type Integer = Int // An unsigned value with the defined number of octets.
+
+  /**
+   * The regular Enumeration#ValueSet.toBitMask doesn't really
+   * do what I want. I want it to use the enum's actual values,
+   * not 2**(index of enum). This is so I can have enums like
+   *
+   *    val SomeProtocolDefinedThing = Value(64)
+   *    val SomeOtherThing = Value(128)
+   *
+   */
+  implicit class RichEnumValueSet(val vs: Enumeration#ValueSet) {
+
+    def getBits() = vs.foldRight(0)(_.id | _)
+
+    def fromBits(bits: Long) = {
+    }
+  }
 }
 
 object CommandId extends Enumeration {
@@ -195,22 +219,36 @@ object Priority extends Enumeration {
   val Level3 = Value(3)
 }
 
-object EsmClass extends Enumeration {
-  type EsmClass = Value
+object EsmClass {
 
-  object MessagingMode {
+  object MessagingMode extends Enumeration {
+    type MessagingMode = Value
     val Default = Value(0)
     val DataGram = Value(1)
     val Forward = Value(2)
     val StoreAndForward = Value(3)
   }
-  object MessageType {
-    //val Default = Value(0)
-
+  object MessageType extends Enumeration {
+    type MessageType = Value
+    val NormalMessage = Value(0)
+    val EsmeDeliveryAcknowledgement = Value(8)
+    val EsmeUserAcknowledgement = Value(16)
   }
-  val UDHIIndicator = Value(64)
-  val SetReplyPath = Value(128)
+  object Features extends Enumeration {
+    /*
+    Using bit numbers for these enums instead of actual values
+    so the bitset will work predictably.
+     */
+    type Features = ValueSet
+    val UDHIIndicator = Value(6) // 2^6 = 64
+    val SetReplyPath = Value(7)  // 2^7 = 128
+  }
+  def apply(messagingMode: EsmClass.MessagingMode.MessagingMode, messageType: EsmClass.MessageType.MessageType, features: EsmClass.Features.Value*): EsmClass = {
+    EsmClass(messagingMode, messageType, EsmClass.Features.ValueSet(features:_*))
+  }
 }
+
+case class EsmClass(messagingMode: EsmClass.MessagingMode.MessagingMode, messageType: EsmClass.MessageType.MessageType, features: EsmClass.Features.ValueSet)
 
 abstract class TimeFormat
 case object NullTime extends TimeFormat
@@ -239,14 +277,10 @@ object RegisteredDelivery {
     val Requested = Value(16)
   }
 
-  import SmscDelivery.SmscDelivery
-  import SmeAcknowledgement.SmeAcknowledgement
-  import IntermediateNotification.IntermediateNotification
-
-  case class RegisteredDelivery(smscDelivery: SmscDelivery = SmscDelivery.NoneRequested,
-                                smeAcknowledgement: SmeAcknowledgement = SmeAcknowledgement.NoneRequested,
-                                intermediateNotification: IntermediateNotification = IntermediateNotification.NotRequested)
 }
+case class RegisteredDelivery(smscDelivery: SmscDelivery = RegisteredDelivery.SmscDelivery.NoneRequested,
+                              smeAcknowledgement: SmeAcknowledgement = RegisteredDelivery.SmeAcknowledgement.NoneRequested,
+                              intermediateNotification: IntermediateNotification = RegisteredDelivery.IntermediateNotification.NotRequested)
 
 object DataCodingScheme extends Enumeration {
   type DataCodingScheme = Value
@@ -283,4 +317,5 @@ object MessageState extends Enumeration {
 }
 
 case class Tlv(tag: Short, length: Short, value: Array[Byte])
+
 

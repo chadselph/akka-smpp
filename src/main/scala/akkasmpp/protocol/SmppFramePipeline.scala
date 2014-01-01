@@ -1,7 +1,7 @@
 package akkasmpp.protocol
 
 import akka.io.{SymmetricPipePair, PipelineContext, SymmetricPipelineStage}
-import akka.util.{ByteStringBuilder, ByteString}
+import akka.util.ByteString
 import java.nio.ByteOrder
 import scala.annotation.tailrec
 
