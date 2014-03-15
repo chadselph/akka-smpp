@@ -3,7 +3,7 @@ package akkasmpp.protocol
 /**
  * PDUs from SMPP 3.4
  */
-import akka.util.{ByteStringBuilder, ByteString, ByteIterator}
+import akka.util.{ByteString, ByteIterator}
 import CommandId.CommandId
 import CommandStatus.CommandStatus
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
@@ -12,29 +12,19 @@ import akkasmpp.protocol.ServiceType.ServiceType
 import akkasmpp.protocol.Priority.Priority
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
 import akkasmpp.protocol.MessageState.MessageState
-import akkasmpp.protocol.bytestrings.WritePdu
+import akkasmpp.protocol.bytestrings.{ReadPdu, WritePdu}
 import akkasmpp.protocol.bytestrings.WritePdu.DataSmRespWriter
-import akkasmpp.protocol.SmppTypes.COctetString
+import akkasmpp.protocol.SmppTypes.MessageId
 
 
 object Pdu {
   implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
   def fromBytes(bytes: ByteIterator): Pdu = {
-    bytes.getInt // length
-    val cmdId = CommandId(bytes.getInt)
-    val cmdStatus = CommandStatus(bytes.getInt)
-    val seqNum = bytes.getInt
-    new Pdu(cmdId) with WritePdu.HeaderOnlyWriter {
-      val sequenceNumber: SmppTypes.Integer = seqNum
-      val commandStatus = cmdStatus
-    }
+    ReadPdu.readPdu(bytes)
   }
 }
 
 abstract class Pdu(val commandId: CommandId) {
-  override def toString() = {
-    s"Pdu($commandLength, $commandId, $commandStatus, $sequenceNumber)"
-  }
 
   lazy val commandLength = toByteString.length
   def sequenceNumber: SmppTypes.Integer
@@ -47,16 +37,16 @@ trait NullCommandStatus {
 }
 
 trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter {
-  def systemId: SmppTypes.COctetString
-  def password: SmppTypes.COctetString
-  def systemType: SmppTypes.COctetString
+  def systemId: COctetString
+  def password: COctetString
+  def systemType: COctetString
   def interfaceVersion: Byte
   def addrTon: TypeOfNumber
   def addrNpi: NumericPlanIndicator
 }
 
 trait BindRespLike extends Pdu with WritePdu.BindRespWriter {
-  def systemId: SmppTypes.COctetString
+  def systemId: COctetString
   def scInterfaceVersion: Option[Tlv]
 }
 
@@ -65,10 +55,10 @@ trait SmLike extends Pdu with WritePdu.SmWriter {
   def serviceType: ServiceType
   def sourceAddrTon: TypeOfNumber
   def sourceAddrNpi: NumericPlanIndicator
-  def sourceAddr: SmppTypes.COctetString
+  def sourceAddr: COctetString
   def destAddrTon: TypeOfNumber
   def destAddrNpi: NumericPlanIndicator
-  def destinationAddr: SmppTypes.COctetString
+  def destinationAddr: COctetString
   def esmClass: EsmClass
   def protocolId: Byte
   def priorityFlag: Priority
@@ -78,53 +68,53 @@ trait SmLike extends Pdu with WritePdu.SmWriter {
   def replaceIfPresentFlag: Boolean
   def dataCoding: DataCodingScheme
   def smDefaultMsgId: Byte
-  def smLength: SmppTypes.Integer
-  def shortMessage: SmppTypes.COctetString
+  def smLength: Byte
+  def shortMessage: OctetString
   def tlvs: List[Tlv]
 }
 
 trait SmRespLike extends Pdu with WritePdu.SmRespWriter {
-  def messageId: Option[SmppTypes.COctetString]
+  def messageId: Option[COctetString]
 }
 
 /**
  * Binds in transmit only mode
  */
-case class BindTransmitter(sequenceNumber: SmppTypes.Integer, systemId: SmppTypes.COctetString, password: SmppTypes.COctetString,
-                           systemType: SmppTypes.COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
+case class BindTransmitter(sequenceNumber: SmppTypes.Integer, systemId: COctetString, password: COctetString,
+                           systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
   extends Pdu(CommandId.bind_transmitter) with BindLike
 
 case class BindTransmitterResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                               systemId: SmppTypes.COctetString, scInterfaceVersion: Option[Tlv])
+                               systemId: COctetString, scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_transmitter_resp) with BindRespLike
 
 /**
  * Binds in receive only mode
  */
-case class BindReceiver(sequenceNumber: SmppTypes.Integer, systemId: SmppTypes.COctetString, password: SmppTypes.COctetString,
+case class BindReceiver(sequenceNumber: SmppTypes.Integer, systemId: COctetString, password: COctetString,
                         systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
   extends Pdu(CommandId.bind_receiver) with BindLike
 
 case class BindReceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                            systemId: SmppTypes.COctetString, scInterfaceVersion: Option[Tlv])
+                            systemId: COctetString, scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_receiver_resp) with BindRespLike
 
 /**
  * Binds in transmit and receiver mode
  */
-case class BindTransceiver(sequenceNumber: SmppTypes.Integer, systemId: SmppTypes.COctetString, password: SmppTypes.COctetString,
-                        systemType: SmppTypes.COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
+case class BindTransceiver(sequenceNumber: SmppTypes.Integer, systemId: COctetString, password: COctetString,
+                        systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
   extends Pdu(CommandId.bind_transceiver) with BindLike
 
 case class BindTransceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                            systemId: SmppTypes.COctetString, scInterfaceVersion: Option[Tlv])
+                            systemId: COctetString, scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_transceiver_resp) with BindRespLike
 
 /**
  * For SMSC to initiate the bind (instead of ESME). Unlikely to be supported in this library
  */
-case class Outbind(sequenceNumber: SmppTypes.Integer, systemId: SmppTypes.COctetString,
-                   password: SmppTypes.COctetString) extends Pdu(CommandId.outbind) with NullCommandStatus with WritePdu.OutbindWriter
+case class Outbind(sequenceNumber: SmppTypes.Integer, systemId: COctetString,
+                   password: COctetString) extends Pdu(CommandId.outbind) with NullCommandStatus with WritePdu.OutbindWriter
 
 /**
   Tears down the connection
@@ -133,7 +123,7 @@ case class Unbind(sequenceNumber: SmppTypes.Integer)
   extends Pdu(CommandId.unbind) with NullCommandStatus with WritePdu.HeaderOnlyWriter
 
 case class UnbindResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer)
-  extends Pdu(CommandId.unbind) with WritePdu.HeaderOnlyWriter
+  extends Pdu(CommandId.unbind_resp) with WritePdu.HeaderOnlyWriter
 
 /**
  * Response to an invalid PDU
@@ -151,10 +141,10 @@ case class SubmitSm(
                      serviceType: ServiceType,
                      sourceAddrTon: TypeOfNumber,
                      sourceAddrNpi: NumericPlanIndicator,
-                     sourceAddr: SmppTypes.COctetString,
+                     sourceAddr: COctetString,
                      destAddrTon: TypeOfNumber,
                      destAddrNpi: NumericPlanIndicator,
-                     destinationAddr: SmppTypes.COctetString,
+                     destinationAddr: COctetString,
                      esmClass: EsmClass,
                      protocolId: Byte,
                      priorityFlag: Priority,
@@ -164,12 +154,12 @@ case class SubmitSm(
                      replaceIfPresentFlag: Boolean,
                      dataCoding: DataCodingScheme,
                      smDefaultMsgId: Byte,
-                     smLength: SmppTypes.Integer,
-                     shortMessage: SmppTypes.COctetString,
+                     smLength: Byte,
+                     shortMessage: OctetString,
                      tlvs: List[Tlv]
                      ) extends Pdu(CommandId.submit_sm) with NullCommandStatus with SmLike
 
-case class SubmitSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: Option[SmppTypes.COctetString])
+case class SubmitSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.SequenceNumber, messageId: Option[MessageId])
   extends Pdu(CommandId.submit_sm_resp) with SmRespLike
 
 case class SubmitMulti(
@@ -177,9 +167,9 @@ case class SubmitMulti(
                         serviceType: ServiceType,
                         sourceAddrTon: TypeOfNumber,
                         sourceAddrNpi: NumericPlanIndicator,
-                        sourceAddr: SmppTypes.COctetString,
+                        sourceAddr: COctetString,
                         numberOfDests: SmppTypes.Integer,
-                        destAddresses: List[(TypeOfNumber, NumericPlanIndicator, SmppTypes.COctetString)],
+                        destAddresses: List[(TypeOfNumber, NumericPlanIndicator, COctetString)],
                         esmClass: EsmClass,
                         protocolId: Byte,
                         priorityFlag: Priority,
@@ -189,14 +179,14 @@ case class SubmitMulti(
                         replaceIfPresentFlag: Boolean,
                         dataCoding: DataCodingScheme,
                         smDefaultMsgId: Byte,
-                        smLength: SmppTypes.Integer,
-                        shortMessage: SmppTypes.OctetString,
+                        smLength: Byte,
+                        shortMessage: OctetString,
                         tlvs: List[Tlv]
                         ) extends Pdu(CommandId.submit_multi) with NullCommandStatus with WritePdu.SubmitMultiWriter
 
 case class SubmitMultiResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                            messageId: SmppTypes.COctetString, noUnsuccess: Byte,
-                            unsuccessSmes: List[(TypeOfNumber, NumericPlanIndicator, SmppTypes.COctetString, CommandStatus)])
+                            messageId: COctetString, noUnsuccess: Byte,
+                            unsuccessSmes: List[(TypeOfNumber, NumericPlanIndicator, COctetString, CommandStatus)])
   extends Pdu(CommandId.submit_sm_resp) with WritePdu.SubmitMultiRespWriter
 
 case class DeliverSm(
@@ -204,10 +194,10 @@ case class DeliverSm(
                      serviceType: ServiceType,
                      sourceAddrTon: TypeOfNumber,
                      sourceAddrNpi: NumericPlanIndicator,
-                     sourceAddr: SmppTypes.COctetString,
+                     sourceAddr: COctetString,
                      destAddrTon: TypeOfNumber,
                      destAddrNpi: NumericPlanIndicator,
-                     destinationAddr: SmppTypes.COctetString,
+                     destinationAddr: COctetString,
                      esmClass: EsmClass,
                      protocolId: Byte,
                      priorityFlag: Priority,
@@ -217,44 +207,44 @@ case class DeliverSm(
                      replaceIfPresentFlag: Boolean,
                      dataCoding: DataCodingScheme,
                      smDefaultMsgId: Byte,
-                     smLength: SmppTypes.Integer,
-                     shortMessage: SmppTypes.OctetString,
+                     smLength: Byte,
+                     shortMessage: OctetString,
                      tlvs: List[Tlv]
-                     ) extends Pdu(CommandId.submit_sm) with NullCommandStatus with SmLike
+                     ) extends Pdu(CommandId.deliver_sm) with NullCommandStatus with SmLike
 
-case class DeliverSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: Option[SmppTypes.COctetString])
-  extends Pdu(CommandId.submit_sm_resp) with SmRespLike
+case class DeliverSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: Option[COctetString])
+  extends Pdu(CommandId.deliver_sm_resp) with SmRespLike
 
 case class DataSm(sequenceNumber: SmppTypes.Integer, serviceType: ServiceType,
-                  sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: SmppTypes.COctetString,
-                  destAddrTon: TypeOfNumber, destAddrNpi: NumericPlanIndicator, destinationAddr: SmppTypes.COctetString,
+                  sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: COctetString,
+                  destAddrTon: TypeOfNumber, destAddrNpi: NumericPlanIndicator, destinationAddr: COctetString,
                   esmClass: EsmClass, registeredDelivery: RegisteredDelivery, dataCoding: DataCodingScheme, tlvs: List[Tlv])
   extends Pdu(CommandId.data_sm) with NullCommandStatus with WritePdu.DataSmWriter
 
-case class DataSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: SmppTypes.COctetString,
+case class DataSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: COctetString,
                       tlvs: List[Tlv]) extends Pdu(CommandId.data_sm_resp) with DataSmRespWriter
 
-case class QuerySm(sequenceNumber: SmppTypes.Integer, messageId: SmppTypes.COctetString,
-                   sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: SmppTypes.COctetString)
+case class QuerySm(sequenceNumber: SmppTypes.Integer, messageId: COctetString,
+                   sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: COctetString)
   extends Pdu(CommandId.query_sm) with NullCommandStatus with WritePdu.QuerySmWriter
 
 case class QuerySmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                       messageId: SmppTypes.COctetString, finalDate: TimeFormat, messageState: MessageState, errorCode: SmppTypes.Integer)
+                       messageId: COctetString, finalDate: TimeFormat, messageState: MessageState, errorCode: SmppTypes.Integer)
   extends Pdu(CommandId.query_sm_resp) with WritePdu.QuerySmRespWriter
 
 case class CancelSm(sequenceNumber: SmppTypes.Integer, serviceType: ServiceType,
-                    messageId: SmppTypes.COctetString, sourceAddrTon : TypeOfNumber, sourceAddrNpi: NumericPlanIndicator,
-                    sourceAddr: SmppTypes.COctetString, destAddrTon: TypeOfNumber, destAddrNpi: NumericPlanIndicator,
-                    destinationAddr: SmppTypes.COctetString)
+                    messageId: COctetString, sourceAddrTon : TypeOfNumber, sourceAddrNpi: NumericPlanIndicator,
+                    sourceAddr: COctetString, destAddrTon: TypeOfNumber, destAddrNpi: NumericPlanIndicator,
+                    destinationAddr: COctetString)
   extends Pdu(CommandId.cancel_sm) with NullCommandStatus with WritePdu.CancelSmWriter
 
 case class CancelSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer)
   extends Pdu(CommandId.cancel_sm_resp) with WritePdu.HeaderOnlyWriter
 
-case class ReplaceSm(sequenceNumber: SmppTypes.Integer, messageId: SmppTypes.COctetString,
-                     sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: SmppTypes.COctetString,
+case class ReplaceSm(sequenceNumber: SmppTypes.Integer, messageId: COctetString,
+                     sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: COctetString,
                      scheduleDeliveryTime: TimeFormat, validityPeriod: TimeFormat, registeredDelivery: RegisteredDelivery,
-                     smDefaultMsgId: Byte, smLength: SmppTypes.Integer, shortMessage: SmppTypes.OctetString)
+                     smDefaultMsgId: Byte, smLength: Byte, shortMessage: OctetString)
   extends Pdu(CommandId.replace_sm) with NullCommandStatus with WritePdu.ReplaceSmWriter
 
 case class ReplaceSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer)
@@ -268,7 +258,7 @@ case class EnquireLinkResp(sequenceNumber: SmppTypes.Integer)
 
 case class AlertNotification(sequenceNumber: SmppTypes.Integer,
                              sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator,
-                             sourceAddr: SmppTypes.COctetString,  esmeAddrTon: TypeOfNumber,
-                             esmeAddrNpi: NumericPlanIndicator, esmeAddr: SmppTypes.COctetString,
+                             sourceAddr: COctetString,  esmeAddrTon: TypeOfNumber,
+                             esmeAddrNpi: NumericPlanIndicator, esmeAddr: COctetString,
                              msAvailabilityStatus: Option[Tlv]) extends Pdu(CommandId.alert_notification) with NullCommandStatus
                              with WritePdu.AlertNotificationWriter

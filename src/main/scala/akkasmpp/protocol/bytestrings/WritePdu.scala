@@ -1,7 +1,7 @@
 package akkasmpp.protocol.bytestrings
 
 import akka.util.{ByteStringBuilder, ByteString}
-import akkasmpp.protocol.{AlertNotification, ReplaceSm, CancelSm, QuerySmResp, QuerySm, DataSmResp, DataSm, SubmitMultiResp, SubmitMulti, SmRespLike, SmLike, Outbind, BindRespLike, BindLike, Pdu}
+import akkasmpp.protocol.{COctetString, AlertNotification, ReplaceSm, CancelSm, QuerySmResp, QuerySm, DataSmResp, DataSm, SubmitMultiResp, SubmitMulti, SmRespLike, SmLike, Outbind, BindRespLike, BindLike, Pdu}
 import SmppByteString.Builder
 
 /**
@@ -55,7 +55,6 @@ object WritePdu {
       bsb.putTypeOfNumber(addrTon)
       bsb.putNumberPlanIndicator(addrNpi)
       bsb.putCOctetString("")  // addressRange
-      println(bsb.result())
       bsb.result()
     }
   }

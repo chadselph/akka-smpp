@@ -1,6 +1,0 @@
-package akkasmpp
-
-trait Smpp {
-
-
-}

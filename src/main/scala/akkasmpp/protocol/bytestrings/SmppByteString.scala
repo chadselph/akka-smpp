@@ -2,7 +2,7 @@ package akkasmpp.protocol.bytestrings
 
 import akka.util.{ByteIterator, ByteStringBuilder}
 import java.nio.charset.Charset
-import akkasmpp.protocol.{ServiceType, MessageState, DataCodingScheme, Priority, NumericPlanIndicator, TypeOfNumber, CommandStatus, CommandId, EsmClass, Tlv, RegisteredDelivery, AbsoluteTimeFormat, RelativeTimeFormat, NullTime, TimeFormat}
+import akkasmpp.protocol.{OctetString, COctetString, ServiceType, MessageState, DataCodingScheme, Priority, NumericPlanIndicator, TypeOfNumber, CommandStatus, CommandId, EsmClass, Tlv, RegisteredDelivery, AbsoluteTimeFormat, RelativeTimeFormat, NullTime, TimeFormat}
 import akkasmpp.protocol.CommandId.CommandId
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
@@ -19,7 +19,7 @@ object SmppByteString {
 
   // hardcoding because SMPP is BIG_ENDIAN
   implicit val byteorder = java.nio.ByteOrder.BIG_ENDIAN
-  val ascii = java.nio.charset.Charset.forName("ASCII")
+  implicit val ascii = java.nio.charset.Charset.forName("UTF-8")
 
   implicit class Builder(val bsb: ByteStringBuilder) extends AnyVal {
 
@@ -28,7 +28,16 @@ object SmppByteString {
      * @param s String to send
      * @param charset Encoding to use
      */
+
     def putCOctetString(s: String)(implicit charset: Charset): bsb.type = putCOctetString(s.getBytes(charset))
+
+    def putCOctetString(c: COctetString) = {
+      // XXX: try to do this with more copying
+      val ba = new Array[Byte](c.size)
+      c.copyTo(ba)
+      bsb.putBytes(ba)
+      bsb.putByte(0)
+    }
 
     def putCOctetString(b: Array[Byte]): bsb.type = {
       putOctetString(b)
@@ -42,8 +51,12 @@ object SmppByteString {
      * @return
      */
     def putOctetString(s: String)(implicit charset: Charset): bsb.type = putOctetString(s.getBytes(charset))
-
     def putOctetString(b: Array[Byte]): bsb.type = bsb.putBytes(b)
+    def putOctetString(b: OctetString) = {
+      val bytes = new Array[Byte](b.size)
+      b.copyTo(bytes)
+      bsb.putBytes(bytes)
+    }
 
     private def putEnumByte(e: Enumeration#Value) = bsb.putByte(e.id.toByte)
     private def putEnumInt(e: Enumeration#Value) = bsb.putInt(e.id)
@@ -82,9 +95,23 @@ object SmppByteString {
 
   implicit class Iterator(val bi: ByteIterator) extends AnyVal {
 
-    def getCOctetString: Array[Byte] = (bi takeWhile (_ != '\0')).toArray
-    def getOctetString(n: Int): Array[Byte] = (bi take n).toArray
-    def getCOctetStringMaybe: Option[Array[Byte]] = {
+    def getCOctetString: COctetString = {
+      //(bi takeWhile (_ != 0)).toArray
+      val bsb = new ByteStringBuilder
+      var b: Byte = bi.getByte
+      while(b != 0) {
+        bsb.putByte(b)
+        b = bi.getByte
+      }
+      new COctetString(bsb.result().toArray)
+    }
+    def getOctetString(n: Int): OctetString = {
+      // TEMP bitwise HACK
+      val ba = new Array[Byte](n & 0xff)
+      bi.getBytes(ba)
+      new OctetString(ba)
+    }
+    def getCOctetStringMaybe: Option[COctetString] = {
       if (bi.isEmpty) None
       else Some(getCOctetString)
     }
@@ -94,14 +121,14 @@ object SmppByteString {
       XXX: some concern here around how to react to invalid bytes...
       this approach will basically just throw an exception.
      */
-    def getCommandId = CommandId(bi.getByte)
+    def getCommandId = CommandId(bi.getInt)
     def getCommandStatus = CommandStatus(bi.getInt)
     def getTypeOfNumber = TypeOfNumber(bi.getByte)
     def getNumericPlanIndicator = NumericPlanIndicator(bi.getByte)
     def getPriority = Priority(bi.getByte)
-    def getDataCodingScheme = DataCodingScheme(bi.getByte)
+    def getDataCodingScheme = DataCodingScheme(bi.getByte & 0xf)
     def getMessageState = MessageState(bi.getByte)
-    def getServiceType = ServiceType.withName(new String(bi.getCOctetString, ascii))
+    def getServiceType = ServiceType.withName(bi.getCOctetString.asString)
     def getEsmClass = {
       val b = bi.getByte
       // XXX: make this into an unapply destructor?
@@ -110,6 +137,8 @@ object SmppByteString {
       val features = EsmClass.Features.ValueSet.fromBitMask(Array(b & 192L))
       EsmClass(messagingMode, messagingType, features.toSeq: _*)
     }
+
+    def getSmLength = bi.getByte & 0xff
 
     def getTime = {
       // XXX: parse time formats

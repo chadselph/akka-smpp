@@ -6,11 +6,12 @@ import akkasmpp.protocol.EsmClass.MessagingMode
 import akkasmpp.protocol.RegisteredDelivery.SmscDelivery.SmscDelivery
 import akkasmpp.protocol.RegisteredDelivery.SmeAcknowledgement.SmeAcknowledgement
 import akkasmpp.protocol.RegisteredDelivery.IntermediateNotification.IntermediateNotification
+import java.util.Arrays
 
 object SmppTypes {
-  type OctetString = Array[Byte] // close enough...
-  type COctetString = Array[Byte] // null terminated string
   type Integer = Int // An unsigned value with the defined number of octets.
+  type SequenceNumber = Integer
+  type MessageId = COctetString
 
   /**
    * The regular Enumeration#ValueSet.toBitMask doesn't really
@@ -28,6 +29,51 @@ object SmppTypes {
     def fromBits(bits: Long) = {
     }
   }
+}
+
+/**
+ * Immutable wrapper for  array of octets followed by a 0
+ */
+object COctetString {
+  def empty = new COctetString(Array[Byte]())
+}
+
+class COctetString(protected val data: Array[Byte]) {
+
+  def this(s: String)(implicit charEncoding: java.nio.charset.Charset) = this(s.getBytes(charEncoding))
+
+  override def equals(other: Any) = other match {
+      case o: COctetString => Arrays.equals(data, o.data)
+      case _ => false
+    }
+
+  def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
+
+  def size = data.size
+
+  def asString(implicit charEncoding: java.nio.charset.Charset) = {
+    new String(data)
+  }
+
+  override def toString = new String(data, java.nio.charset.Charset.forName("ASCII"))
+}
+
+/**
+ * String of octets with no null terminator
+ * @param data
+ */
+class OctetString(protected val data: Array[Byte]) {
+
+  def size = data.size
+  def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
+  override def equals(other: Any) = other match {
+    case o: OctetString => Arrays.equals(data, o.data)
+    case _ => false
+  }
+  override def toString = {
+    data.map("%02X".format(_)).mkString("<OctetString: ", "", ">")
+  }
+
 }
 
 object CommandId extends Enumeration {

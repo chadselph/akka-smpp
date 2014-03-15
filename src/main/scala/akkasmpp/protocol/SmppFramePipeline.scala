@@ -8,7 +8,7 @@ import scala.annotation.tailrec
 /**
  * Decodes bytestrings into PDUs, vice versa.
  */
-class SmppFramePipeline extends SymmetricPipelineStage[PipelineContext, Pdu, ByteString]{
+class SmppFramePipeline extends SymmetricPipelineStage[PipelineContext, Pdu, ByteString] {
 
   implicit val charencoding = java.nio.charset.Charset.forName("UTF-8")
   implicit val byteOrder = ByteOrder.BIG_ENDIAN
