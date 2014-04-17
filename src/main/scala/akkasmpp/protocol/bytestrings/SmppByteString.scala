@@ -2,7 +2,7 @@ package akkasmpp.protocol.bytestrings
 
 import akka.util.{ByteIterator, ByteStringBuilder}
 import java.nio.charset.Charset
-import akkasmpp.protocol.{OctetString, COctetString, ServiceType, MessageState, DataCodingScheme, Priority, NumericPlanIndicator, TypeOfNumber, CommandStatus, CommandId, EsmClass, Tlv, RegisteredDelivery, AbsoluteTimeFormat, RelativeTimeFormat, NullTime, TimeFormat}
+import akkasmpp.protocol.{Tag, OctetString, COctetString, ServiceType, MessageState, DataCodingScheme, Priority, NumericPlanIndicator, TypeOfNumber, CommandStatus, CommandId, EsmClass, Tlv, RegisteredDelivery, AbsoluteTimeFormat, RelativeTimeFormat, NullTime, TimeFormat}
 import akkasmpp.protocol.CommandId.CommandId
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
@@ -86,9 +86,9 @@ object SmppByteString {
         bsb.putByte(combined)
     }
     def putTlv(tlv: Tlv) = {
-      bsb.putShort(tlv.tag)
-      bsb.putShort(tlv.length)
-      bsb.putBytes(tlv.value)
+      bsb.putShort(tlv.tag.id.toShort)
+      bsb.putShort(tlv.value.size.toShort)
+      bsb.putOctetString(tlv.value)
     }
 
   }
@@ -156,11 +156,10 @@ object SmppByteString {
     }
 
     def getTlv = {
-      val tag = bi.getShort
+      val tag = Tag(bi.getShort)
       val len = bi.getShort
-      val value = new Array[Byte](len)
-      bi.getBytes(value)
-      Tlv(tag, len, value)
+      val value = bi.getOctetString(len)
+      Tlv(tag, value)
     }
 
     def getTlvs: List[Tlv] = {

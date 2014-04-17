@@ -1,11 +1,11 @@
 package akkasmpp.actors
 
 import akka.pattern.pipe
-import akka.actor.Actor
+import akka.actor.{ActorLogging, Actor}
 import akkasmpp.protocol.{CommandStatus, GenericNack, Pdu, BindLike, BindRespLike, EnquireLinkResp, EnquireLink}
 import scala.concurrent.{ExecutionContext, Future}
 
-trait SmppPartials extends Actor {
+trait SmppPartials extends Actor with ActorLogging {
 
   val wire: SmppServerHandler.SmppPipeLine
   implicit val ec: ExecutionContext
@@ -19,7 +19,8 @@ trait SmppPartials extends Actor {
   }
 
   def enquireLinkResponder: Receive = {
-    case wire.Event(EnquireLink(seq)) =>
+    case wire.Event(s @ EnquireLink(seq)) =>
+      log.debug(s"Got enquire_link $s")
       sender ! wire.Command(EnquireLinkResp(seq))
   }
 

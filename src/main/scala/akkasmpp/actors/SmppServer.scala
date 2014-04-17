@@ -5,7 +5,7 @@ import akka.actor.{ActorSystem, Actor, Deploy, ActorRef, ActorLogging, Stash, Pr
 import scala.concurrent.duration._
 import akka.io.{TcpReadWriteAdapter, IO, Tcp, TcpPipelineHandler}
 import akka.io.TcpPipelineHandler.WithinActorContext
-import akkasmpp.protocol.{SubmitSmResp, EnquireLinkResp, EnquireLink, SubmitSm, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppServerHandler.SmppPipeLine
 import java.nio.charset.Charset
@@ -68,14 +68,18 @@ abstract class SmppServerHandler(val wire: SmppPipeLine)(implicit val ec: Execut
   implicit val cs = Charset.forName("UTF-8")
   val sequenceNumberGen = new AtomicIntegerSequenceNumberGenerator
   var window = Map[SequenceNumber, ActorRef]()
+  val serverSystemId = "akka"
 
   override def receive: Actor.Receive = binding
 
+  // XXX: figure out how to incorporate bind auth
   def binding: Actor.Receive = {
     case wire.Event(bt: BindTransceiver) =>
       log.info(s"got a bind like message $bt")
       sender ! wire.Command(BindTransceiverResp(CommandStatus.ESME_ROK,
-        bt.sequenceNumber, COctetString.empty, None))
+        bt.sequenceNumber, new COctetString(serverSystemId),
+        Some(Tlv(Tag.SC_interface_version, new OctetString(0x34: Byte)))
+      ))
       context.become(bound)
     case wire.Event(br: BindReceiver) =>
     case wire.Event(bt: BindTransmitter) =>

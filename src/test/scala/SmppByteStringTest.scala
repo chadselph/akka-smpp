@@ -21,7 +21,7 @@ class SmppByteStringTest extends FlatSpec with Matchers {
 
   "Esm classes" should "parse correctly" in {
     parsingTheByte(0).getEsmClass should be (EsmClass(MessagingMode.Default, MessageType.NormalMessage))
-    parsingTheByte(202.toByte).getEsmClass should be (EsmClass(MessagingMode.Forward, MessageType.EsmeDeliveryAcknowledgement,
+    parsingTheByte(202.toByte).getEsmClass should be (EsmClass(MessagingMode.Forward, MessageType.DeliveryAcknowledgement,
       Features.UDHIIndicator, Features.SetReplyPath))
   }
 
@@ -34,7 +34,7 @@ class SmppByteStringTest extends FlatSpec with Matchers {
     }
 
     withByteString { bsb =>
-      bsb.putEsmClass(EsmClass(MessagingMode.DataGram, MessageType.EsmeUserAcknowledgement,
+      bsb.putEsmClass(EsmClass(MessagingMode.DataGram, MessageType.ManualUserAcknowledgement,
         Features.SetReplyPath, Features.UDHIIndicator))
     } andThenCheck { bi =>
       bi.len should be (1)

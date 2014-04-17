@@ -30,6 +30,7 @@ object Demo extends App {
           log.info(s"SubmitSm with TLVs of ${ss.tlvs}")
           sender ! wire.Command(SubmitSmResp(
             CommandStatus.ESME_ROK, ss.sequenceNumber, Some(new COctetString("abcde"))))
+          val forwarded = ss.copy(tlvs = Nil)
       }
     }
   }
@@ -39,14 +40,16 @@ object Demo extends App {
     Demo client
    */
 
-  val client = actorSystem.actorOf(SmppClient.props(SmppClientConfig(new InetSocketAddress("localhost", 2775))))
-  client ! Bind("smppclient1", "password")
-  val f = client ? SendMessage("this is message", Did("+15094302095"), Did("+15094302096"))
-  f.mapTo[SendMessageAck].onComplete { ack =>
-    println(ack)
-  }
-  (client ? SendMessage("hahahaa", Did("+15094302095"), Did("+44134243"))) onComplete { x =>
-    println(x)
+  for (creds <- List(("smppclient1", "password"), ("user2", "pass2"))) {
+    val client = actorSystem.actorOf(SmppClient.props(SmppClientConfig(new InetSocketAddress("localhost", 2775))))
+    client ! Bind(creds._1, creds._2)
+    val f = client ? SendMessage("this is message", Did("+15094302095"), Did("+15094302096"))
+    f.mapTo[SendMessageAck].onComplete { ack =>
+      println(ack)
+    }
+    (client ? SendMessage("hahahaa", Did("+15094302095"), Did("+44134243"))) onComplete { x =>
+      println(x)
+    }
   }
 
 }
