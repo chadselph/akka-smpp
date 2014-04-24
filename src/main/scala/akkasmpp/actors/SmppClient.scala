@@ -2,7 +2,7 @@ package akkasmpp.actors
 
 import akka.actor.{Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
-import akkasmpp.protocol.{OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, SubmitSmResp, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{SmscResponse, EsmeRequest, OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, SubmitSmResp, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
@@ -52,6 +52,15 @@ object SmppClient {
    * @param from Who the message came from
    */
   case class ReceiveMessage(content: String, to: Did, from: Did) extends Command
+
+  /**
+   * Send a PDU over the SMPP connection
+   * Since the connection determines the SequenceNumber, pass a function that takes a new sequence
+   * number and returns the PDU you want.
+   * Example:
+   *    SendRawPdu(myPdu.copy(sequenceNumber = _))
+   */
+  case class SendRawPdu(newPdu: SequenceNumber => EsmeRequest) extends Command
 
   /**
    * Used internally
@@ -153,7 +162,7 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
 
   }
 
-  import SmppClient.{SendMessage, SendEnquireLink}
+  import SmppClient.{SendMessage, SendEnquireLink, SendRawPdu}
   def bound(wire: SmppPipeLine, connection: ActorRef): Actor.Receive = {
     case SendMessage(msg, to, from, encoding) =>
       // XXX: Support concat and non-ascii
@@ -172,12 +181,18 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
       log.debug("sending enquire link!")
       connection ! wire.Command(EnquireLink(sequenceNumberGen.next))
 
-    case wire.Event(pdu @ SubmitSmResp(_, seqN, _)) if window.get(seqN).isDefined =>
+    case SendRawPdu(newPdu) =>
+      val pdu = newPdu(sequenceNumberGen.next)
+      log.debug(s"sending raw pdu $pdu")
+      connection ! wire.Command(pdu)
+      window = window.updated(pdu.sequenceNumber, sender)
+
+    case wire.Event(pdu: SmscResponse) if window.get(pdu.sequenceNumber).isDefined =>
       log.debug(s"Incoming SubmitSmResp $pdu")
-      window(seqN) ! pdu
-      window = window - seqN
-    case wire.Event(pdu: SubmitSmResp) =>
-      log.warning(s"SubmitSmResp for unknown sequence number: $pdu")
+      window(pdu.sequenceNumber) ! pdu
+      window = window - pdu.sequenceNumber
+    case wire.Event(pdu: SmscResponse) =>
+      log.warning(s"Response for unknown sequence number: $pdu")
     case wire.Event(EnquireLink(seq)) =>
       connection ! wire.Command(EnquireLinkResp(seq))
     case wire.Event(msg: DeliverSm) =>

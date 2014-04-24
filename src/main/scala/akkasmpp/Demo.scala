@@ -4,10 +4,10 @@ import akka.actor.ActorSystem
 import akka.pattern.ask
 import akkasmpp.actors.{SmppPartials, SmppServerHandler, SmppServerConfig, SmppServer, SmppClientConfig, SmppClient}
 import java.net.InetSocketAddress
-import akkasmpp.actors.SmppClient.{Bind, SendMessageAck, SendMessage, Did}
+import akkasmpp.actors.SmppClient.{SendRawPdu, Bind, SendMessageAck, SendMessage, Did}
 import akka.util.Timeout
 import scala.concurrent.duration._
-import akkasmpp.protocol.{COctetString, CommandStatus, SubmitSmResp, SubmitSm, Pdu}
+import akkasmpp.protocol.{EnquireLink, COctetString, CommandStatus, SubmitSmResp, SubmitSm, Pdu}
 
 object Demo extends App {
 
@@ -48,6 +48,10 @@ object Demo extends App {
       println(ack)
     }
     (client ? SendMessage("hahahaa", Did("+15094302095"), Did("+44134243"))) onComplete { x =>
+      println(x)
+    }
+
+    (client ? SendRawPdu(EnquireLink)) onComplete { x =>
       println(x)
     }
   }

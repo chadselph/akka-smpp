@@ -36,7 +36,15 @@ trait NullCommandStatus {
   def commandStatus = CommandStatus.ESME_ROK
 }
 
-trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter {
+sealed trait EsmeRequest extends Pdu
+
+sealed trait EsmeResponse extends Pdu
+
+sealed trait SmscRequest extends Pdu
+
+sealed trait SmscResponse extends Pdu
+
+trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter with EsmeRequest {
   def systemId: COctetString
   def password: COctetString
   def systemType: COctetString
@@ -45,7 +53,7 @@ trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter {
   def addrNpi: NumericPlanIndicator
 }
 
-trait BindRespLike extends Pdu with WritePdu.BindRespWriter {
+trait BindRespLike extends Pdu with WritePdu.BindRespWriter with SmscResponse {
   def systemId: COctetString
   def scInterfaceVersion: Option[Tlv]
 }
@@ -113,24 +121,24 @@ case class BindTransceiverResp(commandStatus: CommandStatus, sequenceNumber: Smp
 /**
  * For SMSC to initiate the bind (instead of ESME). Unlikely to be supported in this library
  */
-case class Outbind(sequenceNumber: SmppTypes.Integer, systemId: COctetString,
-                   password: COctetString) extends Pdu(CommandId.outbind) with NullCommandStatus with WritePdu.OutbindWriter
+case class Outbind(sequenceNumber: SmppTypes.Integer, systemId: COctetString, password: COctetString)
+  extends Pdu(CommandId.outbind) with NullCommandStatus with WritePdu.OutbindWriter with SmscRequest
 
 /**
   Tears down the connection
  */
 case class Unbind(sequenceNumber: SmppTypes.Integer)
-  extends Pdu(CommandId.unbind) with NullCommandStatus with WritePdu.HeaderOnlyWriter
+  extends Pdu(CommandId.unbind) with NullCommandStatus with WritePdu.HeaderOnlyWriter with SmscRequest with EsmeRequest
 
 case class UnbindResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer)
-  extends Pdu(CommandId.unbind_resp) with WritePdu.HeaderOnlyWriter
+  extends Pdu(CommandId.unbind_resp) with WritePdu.HeaderOnlyWriter with SmscResponse with EsmeResponse
 
 /**
  * Response to an invalid PDU
  */
 
 case class GenericNack(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer)
-  extends Pdu(CommandId.generic_nack) with WritePdu.HeaderOnlyWriter
+  extends Pdu(CommandId.generic_nack) with WritePdu.HeaderOnlyWriter with SmscResponse with EsmeResponse
 
 
 /**
@@ -157,10 +165,10 @@ case class SubmitSm(
                      smLength: Byte,
                      shortMessage: OctetString,
                      tlvs: List[Tlv]
-                     ) extends Pdu(CommandId.submit_sm) with NullCommandStatus with SmLike
+                     ) extends Pdu(CommandId.submit_sm) with NullCommandStatus with SmLike with EsmeRequest
 
 case class SubmitSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.SequenceNumber, messageId: Option[MessageId])
-  extends Pdu(CommandId.submit_sm_resp) with SmRespLike
+  extends Pdu(CommandId.submit_sm_resp) with SmRespLike with SmscResponse
 
 case class SubmitMulti(
                         sequenceNumber: SmppTypes.Integer,
@@ -182,12 +190,12 @@ case class SubmitMulti(
                         smLength: Byte,
                         shortMessage: OctetString,
                         tlvs: List[Tlv]
-                        ) extends Pdu(CommandId.submit_multi) with NullCommandStatus with WritePdu.SubmitMultiWriter
+                        ) extends Pdu(CommandId.submit_multi) with NullCommandStatus with WritePdu.SubmitMultiWriter with EsmeRequest
 
 case class SubmitMultiResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
                             messageId: COctetString, noUnsuccess: Byte,
                             unsuccessSmes: List[(TypeOfNumber, NumericPlanIndicator, COctetString, CommandStatus)])
-  extends Pdu(CommandId.submit_sm_resp) with WritePdu.SubmitMultiRespWriter
+  extends Pdu(CommandId.submit_sm_resp) with WritePdu.SubmitMultiRespWriter with SmscResponse
 
 case class DeliverSm(
                      sequenceNumber: SmppTypes.Integer,
@@ -210,51 +218,51 @@ case class DeliverSm(
                      smLength: Byte,
                      shortMessage: OctetString,
                      tlvs: List[Tlv]
-                     ) extends Pdu(CommandId.deliver_sm) with NullCommandStatus with SmLike
+                     ) extends Pdu(CommandId.deliver_sm) with NullCommandStatus with SmLike with SmscRequest
 
 case class DeliverSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: Option[COctetString])
-  extends Pdu(CommandId.deliver_sm_resp) with SmRespLike
+  extends Pdu(CommandId.deliver_sm_resp) with SmRespLike with EsmeResponse
 
 case class DataSm(sequenceNumber: SmppTypes.Integer, serviceType: ServiceType,
                   sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: COctetString,
                   destAddrTon: TypeOfNumber, destAddrNpi: NumericPlanIndicator, destinationAddr: COctetString,
                   esmClass: EsmClass, registeredDelivery: RegisteredDelivery, dataCoding: DataCodingScheme, tlvs: List[Tlv])
-  extends Pdu(CommandId.data_sm) with NullCommandStatus with WritePdu.DataSmWriter
+  extends Pdu(CommandId.data_sm) with NullCommandStatus with WritePdu.DataSmWriter with EsmeRequest with SmscRequest
 
 case class DataSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer, messageId: COctetString,
-                      tlvs: List[Tlv]) extends Pdu(CommandId.data_sm_resp) with DataSmRespWriter
+                      tlvs: List[Tlv]) extends Pdu(CommandId.data_sm_resp) with DataSmRespWriter with EsmeResponse with SmscResponse
 
 case class QuerySm(sequenceNumber: SmppTypes.Integer, messageId: COctetString,
                    sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: COctetString)
-  extends Pdu(CommandId.query_sm) with NullCommandStatus with WritePdu.QuerySmWriter
+  extends Pdu(CommandId.query_sm) with NullCommandStatus with WritePdu.QuerySmWriter with EsmeRequest
 
 case class QuerySmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
                        messageId: COctetString, finalDate: TimeFormat, messageState: MessageState, errorCode: SmppTypes.Integer)
-  extends Pdu(CommandId.query_sm_resp) with WritePdu.QuerySmRespWriter
+  extends Pdu(CommandId.query_sm_resp) with WritePdu.QuerySmRespWriter with SmscResponse
 
 case class CancelSm(sequenceNumber: SmppTypes.Integer, serviceType: ServiceType,
                     messageId: COctetString, sourceAddrTon : TypeOfNumber, sourceAddrNpi: NumericPlanIndicator,
                     sourceAddr: COctetString, destAddrTon: TypeOfNumber, destAddrNpi: NumericPlanIndicator,
                     destinationAddr: COctetString)
-  extends Pdu(CommandId.cancel_sm) with NullCommandStatus with WritePdu.CancelSmWriter
+  extends Pdu(CommandId.cancel_sm) with NullCommandStatus with WritePdu.CancelSmWriter with EsmeRequest
 
 case class CancelSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer)
-  extends Pdu(CommandId.cancel_sm_resp) with WritePdu.HeaderOnlyWriter
+  extends Pdu(CommandId.cancel_sm_resp) with WritePdu.HeaderOnlyWriter with SmscResponse
 
 case class ReplaceSm(sequenceNumber: SmppTypes.Integer, messageId: COctetString,
                      sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator, sourceAddr: COctetString,
                      scheduleDeliveryTime: TimeFormat, validityPeriod: TimeFormat, registeredDelivery: RegisteredDelivery,
                      smDefaultMsgId: Byte, smLength: Byte, shortMessage: OctetString)
-  extends Pdu(CommandId.replace_sm) with NullCommandStatus with WritePdu.ReplaceSmWriter
+  extends Pdu(CommandId.replace_sm) with NullCommandStatus with WritePdu.ReplaceSmWriter with EsmeRequest
 
 case class ReplaceSmResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer)
-  extends Pdu(CommandId.replace_sm_resp) with WritePdu.HeaderOnlyWriter
+  extends Pdu(CommandId.replace_sm_resp) with WritePdu.HeaderOnlyWriter with SmscResponse
 
 case class EnquireLink(sequenceNumber: SmppTypes.Integer)
-  extends Pdu(CommandId.enquire_link) with NullCommandStatus with WritePdu.HeaderOnlyWriter
+  extends Pdu(CommandId.enquire_link) with NullCommandStatus with WritePdu.HeaderOnlyWriter with SmscRequest with EsmeRequest
 
 case class EnquireLinkResp(sequenceNumber: SmppTypes.Integer)
-  extends Pdu(CommandId.enquire_link_resp) with NullCommandStatus with WritePdu.HeaderOnlyWriter
+  extends Pdu(CommandId.enquire_link_resp) with NullCommandStatus with WritePdu.HeaderOnlyWriter with SmscResponse with EsmeResponse
 
 case class AlertNotification(sequenceNumber: SmppTypes.Integer,
                              sourceAddrTon: TypeOfNumber, sourceAddrNpi: NumericPlanIndicator,
