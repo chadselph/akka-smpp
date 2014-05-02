@@ -2,11 +2,10 @@
 
 package akkasmpp.protocol
 
-import akkasmpp.protocol.EsmClass.MessagingMode
 import akkasmpp.protocol.RegisteredDelivery.SmscDelivery.SmscDelivery
 import akkasmpp.protocol.RegisteredDelivery.SmeAcknowledgement.SmeAcknowledgement
 import akkasmpp.protocol.RegisteredDelivery.IntermediateNotification.IntermediateNotification
-import java.util.Arrays
+import java.util.{NoSuchElementException, Arrays}
 
 object SmppTypes {
   type Integer = Int // An unsigned value with the defined number of octets.
@@ -24,7 +23,7 @@ object SmppTypes {
    */
   implicit class RichEnumValueSet(val vs: Enumeration#ValueSet) {
 
-    def getBits() = vs.foldRight(0)(_.id | _)
+    def getBits = vs.foldRight(0)(_.id | _)
 
     def fromBits(bits: Long) = {
     }
@@ -113,8 +112,8 @@ object CommandId extends Enumeration {
     // would like to make this a little more... dynamic.
     v match {
       case this.generic_nack => classOf[GenericNack]
-      case this.bind_receiver => ???
-      case this.bind_receiver_resp => ???
+      case this.bind_receiver => classOf[BindReceiver]
+      case this.bind_receiver_resp => classOf[BindReceiverResp]
       case this.bind_transmitter => classOf[BindTransmitter]
       case this.bind_transmitter_resp => classOf[BindTransmitterResp]
       case this.query_sm => classOf[QuerySm]
@@ -129,8 +128,8 @@ object CommandId extends Enumeration {
       case this.replace_sm_resp => classOf[ReplaceSmResp]
       case this.cancel_sm => classOf[CancelSm]
       case this.cancel_sm_resp => classOf[CancelSmResp]
-      case this.bind_transceiver => ???
-      case this.bind_transceiver_resp => ???
+      case this.bind_transceiver => classOf[BindTransceiver]
+      case this.bind_transceiver_resp => classOf[BindTransceiverResp]
       case this.outbind => classOf[Outbind]
       case this.enquire_link => classOf[EnquireLink]
       case this.enquire_link_resp => classOf[EnquireLinkResp]
@@ -237,7 +236,7 @@ object CommandStatus extends Enumeration {
     Reserved for SMSC vendor specific errors 0x00000400- 0x000004FF Reserved for SMSC vendor specific errors
   */
   for (i <- 0x400 to 0x4ff) {
-    Value(i, "SMSC Vendor Specific Error")
+    Value(i, s"SMSC Vendor Specific Error: $i")
   }
 
   /*
@@ -245,18 +244,38 @@ object CommandStatus extends Enumeration {
   */
 }
 
-object ServiceType extends Enumeration {
-  type ServiceType = Value
-  val Default = Value("")
-  val CellularMessaging = Value("CMT")
-  val CellularPaging = Value("CPT")
-  val VoiceMailNotification = Value("VMN")
-  val VoiceMailAlerting = Value("VMA")
-  val WirelessApplicationProtocol = Value("WAP")
-  val UnstructuredSupplementaryServicesData = Value("USSD")
+object ServiceType {
+  type ServiceType = COctetString
+  def value(s: String) = new COctetString(s)(java.nio.charset.Charset.forName("ASCII"))
+
+  val Default = value("")
+  val CellularMessaging = value("CMT")
+  val CellularPaging = value("CPT")
+  val VoiceMailNotification = value("VMN")
+  val VoiceMailAlerting = value("VMA")
+  val WirelessApplicationProtocol = value("WAP")
+  val UnstructuredSupplementaryServicesData = value("USSD")
 }
 
-object Priority extends Enumeration {
+abstract class FlexibleEnumeration extends Enumeration {
+
+  class InvalidValue(val id: Int) extends Value {
+    override def toString = f"Invalid (0x$id%x)"
+  }
+
+  def getOrInvalid(id: Int): Value = {
+    try {
+      super.apply(id)
+    } catch {
+      case _: NoSuchElementException =>
+        new InvalidValue(id)
+    }
+  }
+
+  def getOrInvalid(id: Byte): Value = getOrInvalid(id.toInt & 0xff)
+}
+
+object Priority extends FlexibleEnumeration {
   type Priority = Value
 
   val Level0 = Value(0)
@@ -295,6 +314,12 @@ object EsmClass {
   def apply(messagingMode: EsmClass.MessagingMode.MessagingMode, messageType: EsmClass.MessageType.MessageType, features: EsmClass.Features.Value*): EsmClass = {
     EsmClass(messagingMode, messageType, EsmClass.Features.ValueSet(features:_*))
   }
+  def apply(b: Byte) = {
+    val messagingMode = EsmClass.MessagingMode(b & 3)
+    val messagingType = EsmClass.MessageType(b & 60)
+    val features = EsmClass.Features.ValueSet.fromBitMask(Array(b & 192L))
+    EsmClass(messagingMode, messagingType, features.toSeq: _*)
+  }
 }
 
 case class EsmClass(messagingMode: EsmClass.MessagingMode.MessagingMode, messageType: EsmClass.MessageType.MessageType, features: EsmClass.Features.ValueSet)
@@ -312,6 +337,7 @@ object RegisteredDelivery {
     val SuccessAndFailureRequested = Value(1)
     val FailureRequested = Value(2)
   }
+
   object SmeAcknowledgement extends Enumeration {
     type SmeAcknowledgement = Value
     val NoneRequested = Value(0)
@@ -325,6 +351,8 @@ object RegisteredDelivery {
     val NotRequested = Value(0)
     val Requested = Value(16)
   }
+
+  def apply(b: Byte) = RegisteredDelivery(SmscDelivery(b & 3), SmeAcknowledgement(b & 12), IntermediateNotification(b & 16))
 
 }
 case class RegisteredDelivery(smscDelivery: SmscDelivery = RegisteredDelivery.SmscDelivery.NoneRequested,
@@ -367,7 +395,7 @@ object MessageState extends Enumeration {
 
 case class Tlv(tag: Tag.Tag, value: OctetString)
 
-object Tag extends Enumeration {
+object Tag extends FlexibleEnumeration {
 
   type Tag = Value
 

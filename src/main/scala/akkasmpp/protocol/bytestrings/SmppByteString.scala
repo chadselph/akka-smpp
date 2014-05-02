@@ -2,7 +2,7 @@ package akkasmpp.protocol.bytestrings
 
 import akka.util.{ByteIterator, ByteStringBuilder}
 import java.nio.charset.Charset
-import akkasmpp.protocol.{Tag, OctetString, COctetString, ServiceType, MessageState, DataCodingScheme, Priority, NumericPlanIndicator, TypeOfNumber, CommandStatus, CommandId, EsmClass, Tlv, RegisteredDelivery, AbsoluteTimeFormat, RelativeTimeFormat, NullTime, TimeFormat}
+import akkasmpp.protocol.{Tag, OctetString, COctetString, MessageState, DataCodingScheme, Priority, NumericPlanIndicator, TypeOfNumber, CommandStatus, CommandId, EsmClass, Tlv, RegisteredDelivery, AbsoluteTimeFormat, RelativeTimeFormat, NullTime, TimeFormat}
 import akkasmpp.protocol.CommandId.CommandId
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
@@ -125,18 +125,11 @@ object SmppByteString {
     def getCommandStatus = CommandStatus(bi.getInt)
     def getTypeOfNumber = TypeOfNumber(bi.getByte)
     def getNumericPlanIndicator = NumericPlanIndicator(bi.getByte)
-    def getPriority = Priority(bi.getByte)
+    def getPriority = Priority.getOrInvalid(bi.getByte)
     def getDataCodingScheme = DataCodingScheme(bi.getByte & 0xf)
     def getMessageState = MessageState(bi.getByte)
-    def getServiceType = ServiceType.withName(bi.getCOctetString.asString)
-    def getEsmClass = {
-      val b = bi.getByte
-      // XXX: make this into an unapply destructor?
-      val messagingMode = EsmClass.MessagingMode(b & 3)
-      val messagingType = EsmClass.MessageType(b & 60)
-      val features = EsmClass.Features.ValueSet.fromBitMask(Array(b & 192L))
-      EsmClass(messagingMode, messagingType, features.toSeq: _*)
-    }
+    def getServiceType = bi.getCOctetString
+    def getEsmClass = EsmClass(bi.getByte)
 
     def getSmLength = bi.getByte & 0xff
 
@@ -146,17 +139,10 @@ object SmppByteString {
       NullTime
     }
 
-    def getRegisteredDelivery = {
-      val b = bi.getByte
-      RegisteredDelivery(
-        RegisteredDelivery.SmscDelivery(b & 3),
-        RegisteredDelivery.SmeAcknowledgement(b & 12),
-        RegisteredDelivery.IntermediateNotification(b & 16)
-      )
-    }
+    def getRegisteredDelivery = RegisteredDelivery(bi.getByte)
 
     def getTlv = {
-      val tag = Tag(bi.getShort)
+      val tag = Tag.getOrInvalid(bi.getShort)
       val len = bi.getShort
       val value = bi.getOctetString(len)
       Tlv(tag, value)
