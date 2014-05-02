@@ -3,7 +3,7 @@ package akkasmpp.actors
 import akka.actor.{Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
 import akkasmpp.protocol.{SmscResponse, EsmeRequest, OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, SubmitSmResp, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
-import akka.io.{TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
+import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
@@ -12,6 +12,8 @@ import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppClient.Did
 import scala.concurrent.duration.{FiniteDuration, Duration}
+import javax.net.ssl.SSLContext
+import akkasmpp.ssl.SslUtil
 
 /**
  * Basic ESME behaviors
@@ -79,7 +81,8 @@ object SmppClient {
   case class SendMessageAck(results: Seq[(CommandStatus, Option[String])]) extends Response
 }
 
-case class SmppClientConfig(bindTo: InetSocketAddress, enquireLinkTimer: Duration = Duration.Inf)
+case class SmppClientConfig(bindTo: InetSocketAddress, enquireLinkTimer: Duration = Duration.Inf,
+                            sslContext: Option[SSLContext] = None)
 
 /**
  * Example SmppClient using the PDU layer
@@ -113,7 +116,17 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
     case c @ Connected(remote, local) =>
       log.debug(s"Connection established to server at $remote")
 
-      val pipeline = TcpPipelineHandler.withLogger(log, new SmppFramePipeline >> new TcpReadWriteAdapter)
+      /*
+      Decide if to do a TLS handshake or not
+       */
+      val stages = config.sslContext match {
+        case None => new SmppFramePipeline >> new TcpReadWriteAdapter
+        case Some(sslContext) =>
+          new SmppFramePipeline >> new TcpReadWriteAdapter >>
+            new SslTlsSupport(SslUtil.sslEngine(sslContext, remote, client = true))
+      }
+
+      val pipeline = TcpPipelineHandler.withLogger(log, stages)
       val handler = context.actorOf(TcpPipelineHandler.props(pipeline, sender, self).withDeploy(Deploy.local))
       context.watch(handler)
       sender ! Tcp.Register(handler)
@@ -191,6 +204,9 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
       log.debug(s"Incoming SubmitSmResp $pdu")
       window(pdu.sequenceNumber) ! pdu
       window = window - pdu.sequenceNumber
+    case wire.Event(pdu: EnquireLinkResp) =>
+      log.debug(s"got enquire_link_resp")
+      // XXX: update some internal timer?
     case wire.Event(pdu: SmscResponse) =>
       log.warning(s"Response for unknown sequence number: $pdu")
     case wire.Event(EnquireLink(seq)) =>
@@ -205,7 +221,6 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
       )
       context.parent ! cmd
       connection ! wire.Command(DeliverSmResp(CommandStatus.ESME_ROK, msg.sequenceNumber, Some(COctetString.empty)))
-    case wire.Event(msg: EnquireLinkResp) =>
     /*
     case wire.Event(msg: DataSm) =>
     case wire.Event(msg: AlertNotification) =>
