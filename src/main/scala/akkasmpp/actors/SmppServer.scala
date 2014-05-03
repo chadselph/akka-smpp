@@ -77,7 +77,7 @@ abstract class SmppServerHandler(val wire: SmppPipeLine)(implicit val ec: Execut
     case wire.Event(bt: BindTransceiver) =>
       log.info(s"got a bind like message $bt")
       sender ! wire.Command(BindTransceiverResp(CommandStatus.ESME_ROK,
-        bt.sequenceNumber, new COctetString(serverSystemId),
+        bt.sequenceNumber, Some(new COctetString(serverSystemId)),
         Some(Tlv(Tag.SC_interface_version, new OctetString(0x34: Byte)))
       ))
       context.become(bound)

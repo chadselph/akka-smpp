@@ -314,7 +314,7 @@ object EsmClass {
   def apply(messagingMode: EsmClass.MessagingMode.MessagingMode, messageType: EsmClass.MessageType.MessageType, features: EsmClass.Features.Value*): EsmClass = {
     EsmClass(messagingMode, messageType, EsmClass.Features.ValueSet(features:_*))
   }
-  def apply(b: Byte) = {
+  def apply(b: Byte): EsmClass = {
     val messagingMode = EsmClass.MessagingMode(b & 3)
     val messagingType = EsmClass.MessageType(b & 60)
     val features = EsmClass.Features.ValueSet.fromBitMask(Array(b & 192L))
@@ -352,7 +352,8 @@ object RegisteredDelivery {
     val Requested = Value(16)
   }
 
-  def apply(b: Byte) = RegisteredDelivery(SmscDelivery(b & 3), SmeAcknowledgement(b & 12), IntermediateNotification(b & 16))
+  def apply(b: Byte): RegisteredDelivery =
+    RegisteredDelivery(SmscDelivery(b & 3), SmeAcknowledgement(b & 12), IntermediateNotification(b & 16))
 
 }
 case class RegisteredDelivery(smscDelivery: SmscDelivery = RegisteredDelivery.SmscDelivery.NoneRequested,

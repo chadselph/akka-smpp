@@ -28,17 +28,17 @@ object ReadPdu {
         BindReceiver(sequenceNumber, bi.getCOctetString, bi.getCOctetString, bi.getCOctetString, bi.getByte,
           bi.getTypeOfNumber, bi.getNumericPlanIndicator)
       case CommandId.bind_receiver_resp =>
-        BindReceiverResp(status, sequenceNumber, bi.getCOctetString, bi.getTlvs.headOption)
+        BindReceiverResp(status, sequenceNumber, bi.getCOctetStringMaybe, bi.getTlvs.headOption)
       case CommandId.bind_transceiver =>
         BindTransceiver(sequenceNumber, bi.getCOctetString, bi.getCOctetString, bi.getCOctetString, bi.getByte,
           bi.getTypeOfNumber, bi.getNumericPlanIndicator)
       case CommandId.bind_transceiver_resp =>
-        BindTransceiverResp(status, sequenceNumber, bi.getCOctetString, bi.getTlvs.headOption)
+        BindTransceiverResp(status, sequenceNumber, bi.getCOctetStringMaybe, bi.getTlvs.headOption)
       case CommandId.bind_transmitter =>
         BindTransmitter(sequenceNumber, bi.getCOctetString, bi.getCOctetString, bi.getCOctetString, bi.getByte,
           bi.getTypeOfNumber, bi.getNumericPlanIndicator)
       case CommandId.bind_transmitter_resp =>
-        BindTransmitterResp(status, sequenceNumber, bi.getCOctetString, bi.getTlvs.headOption)
+        BindTransmitterResp(status, sequenceNumber, bi.getCOctetStringMaybe, bi.getTlvs.headOption)
       case CommandId.cancel_sm =>
         CancelSm(sequenceNumber, bi.getServiceType, bi.getCOctetString, bi.getTypeOfNumber, bi.getNumericPlanIndicator,
                  bi.getCOctetString, bi.getTypeOfNumber, bi.getNumericPlanIndicator, bi.getCOctetString)

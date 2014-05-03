@@ -63,14 +63,15 @@ object WritePdu {
     def writeBody(bsb: ByteStringBuilder) = {
       if (this.commandStatus.id == 0) {
         /* only return body for command_status 0 */
-        bsb.putCOctetString(systemId)
-        if (scInterfaceVersion.isDefined) {
-          bsb.putTlv(scInterfaceVersion.get)
+        systemId.foreach { system =>
+          bsb.putCOctetString(system)
+          scInterfaceVersion.foreach { sci =>
+            bsb.putTlv(sci)
+          }
         }
       }
       bsb.result()
     }
-
   }
   trait OutbindWriter extends PduWriter { this: Outbind =>
     def writeBody(bsb: ByteStringBuilder) = {

@@ -1,21 +1,10 @@
 import akka.util.{ByteIterator, ByteStringBuilder, ByteString}
 import akkasmpp.protocol.RegisteredDelivery.IntermediateNotification
-import akkasmpp.protocol.{RegisteredDelivery, EsmClass}
+import akkasmpp.protocol.{BindTransceiverResp, CommandStatus, CommandId, Pdu, RegisteredDelivery, EsmClass}
 import org.scalatest.{Matchers, FlatSpec}
 import akkasmpp.protocol.bytestrings.SmppByteString.{Iterator, Builder}
 
-class SmppByteStringTest extends FlatSpec with Matchers {
-
-  def byteStringFromByte(b: Byte) = ByteString.fromArray(Array(b))
-  def parsingTheByte(b: Byte) = byteStringFromByte(b).iterator
-
-  def withByteString(action: (ByteStringBuilder) => ByteStringBuilder) = {
-    val bsb = new ByteStringBuilder
-    action(bsb)
-    new {
-      def andThenCheck(check: ByteIterator => Unit) = check(bsb.result().iterator)
-    }
-  }
+class SmppByteStringTest extends FlatSpec with Matchers with ByteStringHelpers {
 
   import EsmClass.{MessagingMode, MessageType, Features}
 
@@ -65,6 +54,4 @@ class SmppByteStringTest extends FlatSpec with Matchers {
       bi.getByte should be (25)
     }
   }
-
-
 }

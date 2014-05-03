@@ -54,7 +54,7 @@ trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter with 
 }
 
 trait BindRespLike extends Pdu with WritePdu.BindRespWriter with SmscResponse {
-  def systemId: COctetString
+  def systemId: Option[COctetString]
   def scInterfaceVersion: Option[Tlv]
 }
 
@@ -93,7 +93,7 @@ case class BindTransmitter(sequenceNumber: SmppTypes.Integer, systemId: COctetSt
   extends Pdu(CommandId.bind_transmitter) with BindLike
 
 case class BindTransmitterResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                               systemId: COctetString, scInterfaceVersion: Option[Tlv])
+                               systemId: Option[COctetString], scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_transmitter_resp) with BindRespLike
 
 /**
@@ -104,7 +104,7 @@ case class BindReceiver(sequenceNumber: SmppTypes.Integer, systemId: COctetStrin
   extends Pdu(CommandId.bind_receiver) with BindLike
 
 case class BindReceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                            systemId: COctetString, scInterfaceVersion: Option[Tlv])
+                            systemId: Option[COctetString], scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_receiver_resp) with BindRespLike
 
 /**
@@ -115,7 +115,7 @@ case class BindTransceiver(sequenceNumber: SmppTypes.Integer, systemId: COctetSt
   extends Pdu(CommandId.bind_transceiver) with BindLike
 
 case class BindTransceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
-                            systemId: COctetString, scInterfaceVersion: Option[Tlv])
+                            systemId: Option[COctetString], scInterfaceVersion: Option[Tlv])
   extends Pdu(CommandId.bind_transceiver_resp) with BindRespLike
 
 /**
