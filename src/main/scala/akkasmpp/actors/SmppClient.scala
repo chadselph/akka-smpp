@@ -2,7 +2,7 @@ package akkasmpp.actors
 
 import akka.actor.{Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
-import akkasmpp.protocol.{SmscResponse, EsmeRequest, OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, SubmitSmResp, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{SmscResponse, EsmeRequest, OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
@@ -10,8 +10,8 @@ import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
-import akkasmpp.actors.SmppClient.Did
-import scala.concurrent.duration.{FiniteDuration, Duration}
+import akkasmpp.actors.SmppClient.{Bind, Did}
+import scala.concurrent.duration.Duration
 import javax.net.ssl.SSLContext
 import akkasmpp.ssl.SslUtil
 
@@ -82,7 +82,7 @@ object SmppClient {
 }
 
 case class SmppClientConfig(bindTo: InetSocketAddress, enquireLinkTimer: Duration = Duration.Inf,
-                            sslContext: Option[SSLContext] = None)
+                            sslContext: Option[SSLContext] = None, autoBind: Option[Bind] = None)
 
 /**
  * Example SmppClient using the PDU layer
@@ -131,6 +131,7 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
       context.watch(handler)
       sender ! Tcp.Register(handler)
       unstashAll()
+      config.autoBind.foreach { self ! _ } // send bind command to yourself if it's configured for autobind
       context.become(bind(pipeline, handler))
     case _ => stash()
   }

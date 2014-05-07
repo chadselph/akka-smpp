@@ -28,8 +28,6 @@ class SmppFramePipeline extends SymmetricPipelineStage[PipelineContext, Pdu, Byt
      * ByteString -> PDU
      */
     override def eventPipeline: (ByteString) => Iterable[this.type#Result] = { bs: ByteString =>
-
-      println(s"got $bs")
       val (newBuffer, pdus) = pduFromBuffer(buffer ++ bs, Nil)
       buffer = newBuffer
       pdus match {
