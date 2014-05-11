@@ -5,20 +5,24 @@ import akka.actor.{ActorSystem, Actor, Deploy, ActorRef, ActorLogging, Stash, Pr
 import scala.concurrent.duration._
 import akka.io.{TcpReadWriteAdapter, IO, Tcp, TcpPipelineHandler}
 import akka.io.TcpPipelineHandler.WithinActorContext
-import akkasmpp.protocol.{OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppServerHandler.SmppPipeLine
 import java.nio.charset.Charset
 import scala.concurrent.ExecutionContext
+import akkasmpp.actors.SmppServer.SendRawPdu
 
 case class SmppServerConfig(bindAddr: InetSocketAddress, enquireLinkTimeout: Duration = 60.seconds)
 
 object SmppServer {
-  def props(config: SmppServerConfig, handlerSpec: SmppServerHandler.SmppPipeLine => SmppServerHandler) =
+
+  case class SendRawPdu(p: (SequenceNumber) => SmscRequest)
+
+  def props(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler) =
     Props(classOf[SmppServer], config, handlerSpec)
 
   def run(host: String, port: Int, enquireLinkTimeout: Duration = 60.seconds)
-         (actor: SmppServerHandler.SmppPipeLine => SmppServerHandler)
+         (actor: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler)
          (implicit as: ActorSystem) = {
     as.actorOf(SmppServer.props(
       SmppServerConfig(new InetSocketAddress(host, port), enquireLinkTimeout), actor))
@@ -26,7 +30,7 @@ object SmppServer {
   }
 }
 
-class SmppServer(config: SmppServerConfig, handlerSpec: SmppServerHandler.SmppPipeLine => SmppServerHandler)
+class SmppServer(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler)
   extends Actor with ActorLogging with Stash {
 
   import context.system
@@ -48,9 +52,11 @@ class SmppServer(config: SmppServerConfig, handlerSpec: SmppServerHandler.SmppPi
       /*
       New SMPP connection, need to start a handler.
        */
+      val connection = sender
+      log.debug(s"connection is $connection")
       val init = TcpPipelineHandler.withLogger(log, new SmppFramePipeline >> new TcpReadWriteAdapter)
-      val handler = context.actorOf(Props(handlerSpec(init)))
-      val pipeline = context.actorOf(TcpPipelineHandler.props(init, sender, handler).withDeploy(Deploy.local))
+      val handler = context.actorOf(Props(handlerSpec(init, connection)))
+      val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler).withDeploy(Deploy.local))
       sender ! Register(pipeline)
   }
 
@@ -62,8 +68,8 @@ object SmppServerHandler {
   def props(wire: SmppPipeLine) = Props(classOf[SmppServerHandler], wire)
 }
 
-abstract class SmppServerHandler(val wire: SmppPipeLine)(implicit val ec: ExecutionContext)
-  extends Actor with ActorLogging {
+abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRef)(implicit val ec: ExecutionContext)
+  extends SmppActor with ActorLogging {
 
   implicit val cs = Charset.forName("UTF-8")
   val sequenceNumberGen = new AtomicIntegerSequenceNumberGenerator
@@ -86,5 +92,18 @@ abstract class SmppServerHandler(val wire: SmppPipeLine)(implicit val ec: Execut
   }
 
   def bound: Actor.Receive
+
+  def smscRequestReply: Actor.Receive = {
+    case SendRawPdu(p) =>
+      val pdu = p(sequenceNumberGen.next)
+      log.info(s"Sending raw pdu $pdu to $connection")
+      // seems to be a design flaw in Pipelines...
+      connection ! Tcp.Write(pdu.toByteString)
+      window = window.updated(pdu.sequenceNumber, sender)
+    case wire.Event(r: EsmeResponse) if window.contains(r.sequenceNumber) =>
+      log.debug(s"Forwarding along $r")
+      window(r.sequenceNumber) ! r
+      window = window - r.sequenceNumber
+  }
 }
 

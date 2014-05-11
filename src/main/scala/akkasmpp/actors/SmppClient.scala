@@ -1,8 +1,8 @@
 package akkasmpp.actors
 
-import akka.actor.{Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
+import akka.actor.{ActorSystem, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
-import akkasmpp.protocol.{SmscResponse, EsmeRequest, OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
@@ -10,7 +10,7 @@ import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
-import akkasmpp.actors.SmppClient.{Bind, Did}
+import akkasmpp.actors.SmppClient.{ClientReceive, Bind, Did}
 import scala.concurrent.duration.Duration
 import javax.net.ssl.SSLContext
 import akkasmpp.ssl.SslUtil
@@ -21,7 +21,11 @@ import akkasmpp.ssl.SslUtil
 
 object SmppClient {
 
-  def props(config: SmppClientConfig) = Props(classOf[SmppClient], config)
+  type ClientReceive = PartialFunction[SmscRequest, EsmeResponse]
+  def props(config: SmppClientConfig, receiver: ClientReceive) = Props(classOf[SmppClient], config, receiver)
+  def connect(config: SmppClientConfig, receive: ClientReceive, name: String)(implicit ac: ActorSystem) = {
+    ac.actorOf(SmppClient.props(config, receive), name)
+  }
 
   object Implicits {
     implicit def stringAsDid(s: String) = Did(s)
@@ -87,7 +91,8 @@ case class SmppClientConfig(bindTo: InetSocketAddress, enquireLinkTimer: Duratio
 /**
  * Example SmppClient using the PDU layer
  */
-class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with Stash {
+class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
+  extends SmppActor with ActorLogging with Stash {
 
   type SmppPipeLine = TcpPipelineHandler.Init[WithinActorContext, Pdu, Pdu]
 
@@ -97,7 +102,7 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
 
   val manager = IO(Tcp)
 
-  val sequenceNumberGen = new AtomicIntegerSequenceNumberGenerator
+  override val sequenceNumberGen = new AtomicIntegerSequenceNumberGenerator
   var window = Map[SequenceNumber, ActorRef]()
 
   log.debug(s"Connecting to server at " + config.bindTo.toString)
@@ -127,8 +132,8 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
       }
 
       val pipeline = TcpPipelineHandler.withLogger(log, stages)
-      val handler = context.actorOf(TcpPipelineHandler.props(pipeline, sender, self).withDeploy(Deploy.local))
-      context.watch(handler)
+      val handler = context.actorOf(TcpPipelineHandler.props(pipeline, sender, self).withDeploy(Deploy.local), "handler")
+      context.watch(sender)
       sender ! Tcp.Register(handler)
       unstashAll()
       config.autoBind.foreach { self ! _ } // send bind command to yourself if it's configured for autobind
@@ -163,7 +168,7 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
         config.enquireLinkTimer match {
           case f: FiniteDuration =>
             log.debug("Starting EnquireLink loop")
-            context.system.scheduler.schedule(f, f, self, SmppClient.SendEnquireLink)(context.dispatcher)
+            context.system.scheduler.schedule(f/2, f, self, SmppClient.SendEnquireLink)(context.dispatcher)
           case _ =>
         }
 
@@ -189,7 +194,8 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
                          0x0, body.length.toByte, new OctetString(body), Nil)
       log.info(s"Sending message $cmd")
       connection ! wire.Command(cmd)
-      window = window.updated(seqNum, context.actorOf(SubmitSmRespWatcher.props(Set(seqNum), sender)))
+      window = window.updated(seqNum, context.actorOf(SubmitSmRespWatcher.props(Set(seqNum), sender),
+        s"seqN-${cmd.sequenceNumber}"))
 
     case SendEnquireLink =>
       log.debug("sending enquire link!")
@@ -212,6 +218,10 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
       log.warning(s"Response for unknown sequence number: $pdu")
     case wire.Event(EnquireLink(seq)) =>
       connection ! wire.Command(EnquireLinkResp(seq))
+    case wire.Event(msg: SmscRequest) if receiver.isDefinedAt(msg) =>
+      // XXX: also make this async for Futures
+      connection ! wire.Command(receiver(msg))
+      /*
     case wire.Event(msg: DeliverSm) =>
       log.info(s"Received message $msg")
       // XXX: decode actual message
@@ -222,6 +232,7 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
       )
       context.parent ! cmd
       connection ! wire.Command(DeliverSmResp(CommandStatus.ESME_ROK, msg.sequenceNumber, Some(COctetString.empty)))
+      */
     /*
     case wire.Event(msg: DataSm) =>
     case wire.Event(msg: AlertNotification) =>
@@ -229,6 +240,8 @@ class SmppClient(config: SmppClientConfig) extends Actor with ActorLogging with 
     case wire.Event(pdu: Pdu) =>
       log.warning(s"Received unsupported pdu: $pdu responding with GenericNack")
       connection ! wire.Command(GenericNack(CommandStatus.ESME_RCANCELFAIL, pdu.sequenceNumber))
+
+    case PeerClosed => throw new Exception("PeerClosed")
 
   }
 }

@@ -7,7 +7,7 @@ import java.net.InetSocketAddress
 import akkasmpp.actors.SmppClient.{SendRawPdu, Bind, SendMessageAck, SendMessage, Did}
 import akka.util.Timeout
 import scala.concurrent.duration._
-import akkasmpp.protocol.{EnquireLink, COctetString, CommandStatus, SubmitSmResp, SubmitSm, Pdu}
+import akkasmpp.protocol.{DeliverSmResp, DeliverSm, EnquireLink, COctetString, CommandStatus, SubmitSmResp, SubmitSm, Pdu}
 
 object Demo extends App {
 
@@ -20,8 +20,8 @@ object Demo extends App {
     Demo server
    */
 
-  SmppServer.run("localhost", 2775) { wire =>
-    new SmppServerHandler(wire) with SmppPartials {
+  SmppServer.run("localhost", 2775) { (wire, connection) =>
+    new SmppServerHandler(wire, connection) with SmppPartials {
 
       override def bound = enquireLinkResponder orElse processSubmitSm
 
@@ -41,7 +41,11 @@ object Demo extends App {
    */
 
   for (creds <- List(("smppclient1", "password"), ("user2", "pass2"))) {
-    val client = actorSystem.actorOf(SmppClient.props(SmppClientConfig(new InetSocketAddress("localhost", 2775))))
+    val client = actorSystem.actorOf(SmppClient.props(SmppClientConfig(new InetSocketAddress("localhost", 2775)), {
+      case d: DeliverSm =>
+        println(s"Incoming message $d")
+        DeliverSmResp(CommandStatus.ESME_ROK, d.sequenceNumber, None)
+    }))
     client ! Bind(creds._1, creds._2)
     val f = client ? SendMessage("this is message", Did("+15094302095"), Did("+15094302096"))
     f.mapTo[SendMessageAck].onComplete { ack =>

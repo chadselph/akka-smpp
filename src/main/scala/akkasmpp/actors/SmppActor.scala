@@ -1,8 +1,10 @@
 package akkasmpp.actors
 
-/**
- * Created by chad on 5/8/14.
- */
-trait SmppActor {
+import akka.actor.{ActorRef, Actor}
+import akkasmpp.protocol.SequenceNumberGenerator
+import akkasmpp.protocol.SmppTypes.SequenceNumber
 
+trait SmppActor extends Actor {
+  def sequenceNumberGen: SequenceNumberGenerator
+  def window: Map[SequenceNumber, ActorRef]
 }

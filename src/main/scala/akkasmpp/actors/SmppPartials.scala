@@ -1,11 +1,11 @@
 package akkasmpp.actors
 
 import akka.pattern.pipe
-import akka.actor.{ActorLogging, Actor}
+import akka.actor.ActorLogging
 import akkasmpp.protocol.{CommandStatus, GenericNack, Pdu, BindLike, BindRespLike, EnquireLinkResp, EnquireLink}
 import scala.concurrent.{ExecutionContext, Future}
 
-trait SmppPartials extends Actor with ActorLogging {
+trait SmppPartials extends SmppActor with ActorLogging {
 
   val wire: SmppServerHandler.SmppPipeLine
   implicit val ec: ExecutionContext
