@@ -1,7 +1,6 @@
 package akkasmpp.userdata
 
-import akkasmpp.userdata.InformationElementIdentifier
-
+import akkasmpp.protocol.{OctetString, COctetString}
 
 object InformationElementIdentifier extends Enumeration {
   type InformationElementIdentifier = Value
@@ -21,10 +20,27 @@ object InformationElementIdentifier extends Enumeration {
   val SmallAnimation = Value(0xf)
 }
 
+object UserDataHeader {
+  def fromShortMessage(bytes: OctetString): UserDataHeader = {
+    val len = bytes.data(0)
+
+    def rec(ieStart: Int): List[InformationElement] = {
+      if(ieStart >= len - 1) Nil
+      else {
+        val t = InformationElementIdentifier(bytes.data(ieStart))
+        val l = bytes.data(ieStart + 1)
+        val v = bytes.data.slice(ieStart + 2, ieStart + 2 + l)
+        InformationElement(t, v) :: rec(ieStart + 3 + l)
+      }
+    }
+    UserDataHeader(rec(1))
+  }
+}
+
 case class UserDataHeader(elements: Seq[InformationElement]) {
   val dataLength = elements.map(_.dataLength + 2).sum
 }
 
-case class InformationElement(identifier: InformationElementIdentifier.type, data: Array[Byte]) {
+case class InformationElement(identifier: InformationElementIdentifier.InformationElementIdentifier, data: Array[Byte]) {
   val dataLength = data.length
 }

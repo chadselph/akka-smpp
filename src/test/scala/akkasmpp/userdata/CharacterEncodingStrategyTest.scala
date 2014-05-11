@@ -5,8 +5,8 @@ import org.scalatest.{Matchers, FunSuite}
 class CharacterEncodingStrategyTest extends FunSuite with Matchers {
 
   test("splitting up messages based on encoding works") {
-    LosslessEncodingStrategy.chooseEncoding("ÿ not gsm").maxCharUnitsInSegment should equal (70)
-    LosslessEncodingStrategy.chooseEncoding("only gsm characters").maxCharUnitsInSegment should equal (160)
+    LosslessEncodingStrategy.chooseEncoding("ÿ not gsm").maxCharUnitsInSegment() should equal (70)
+    LosslessEncodingStrategy.chooseEncoding("only gsm characters").maxCharUnitsInSegment() should equal (160)
 
     // with space for extra UDH headers
 
