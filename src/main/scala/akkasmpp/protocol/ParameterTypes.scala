@@ -35,9 +35,12 @@ object SmppTypes {
  */
 object COctetString {
   def empty = new COctetString(Array[Byte]())
+  def apply(bytes: Int*) = {
+    new COctetString(bytes.map(_.toByte).toArray)
+  }
 }
 
-class COctetString(protected val data: Array[Byte]) {
+class COctetString(val data: Array[Byte]) {
 
   def this(s: String)(implicit charEncoding: java.nio.charset.Charset) = this(s.getBytes(charEncoding))
 
@@ -57,11 +60,18 @@ class COctetString(protected val data: Array[Byte]) {
   override def toString = new String(data, java.nio.charset.Charset.forName("ASCII"))
 }
 
+object OctetString {
+  def empty = new OctetString(Array[Byte]())
+  def apply(bytes: Int*) =  {
+    new OctetString(bytes.map(_.toByte).toArray)
+  }
+}
+
 /**
  * String of octets with no null terminator
  * @param data
  */
-class OctetString(protected val data: Array[Byte]) {
+class OctetString(val data: Array[Byte]) {
 
   def this(b: Byte) = this(Array(b))
   def size = data.size
