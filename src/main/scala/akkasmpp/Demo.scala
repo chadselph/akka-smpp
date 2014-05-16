@@ -1,13 +1,15 @@
 package akkasmpp
 import akka.io.{IO, Tcp}
-import akka.actor.ActorSystem
+import akka.actor.{Actor, Props, ActorSystem}
 import akka.pattern.ask
 import akkasmpp.actors.{SmppPartials, SmppServerHandler, SmppServerConfig, SmppServer, SmppClientConfig, SmppClient}
 import java.net.InetSocketAddress
 import akkasmpp.actors.SmppClient.{SendRawPdu, Bind, SendMessageAck, SendMessage, Did}
 import akka.util.Timeout
 import scala.concurrent.duration._
-import akkasmpp.protocol.{DeliverSmResp, DeliverSm, EnquireLink, COctetString, CommandStatus, SubmitSmResp, SubmitSm, Pdu}
+import akkasmpp.protocol.{OctetString, DataCodingScheme, RegisteredDelivery, NullTime, Priority, EsmClass, NumericPlanIndicator, TypeOfNumber, GenericNack, SmscRequest, DeliverSmResp, DeliverSm, EnquireLink, COctetString, CommandStatus, SubmitSmResp, SubmitSm, Pdu}
+import akkasmpp.protocol.EsmClass.{Features, MessageType, MessagingMode}
+import scala.util.Success
 
 object Demo extends App {
 
@@ -38,7 +40,6 @@ object Demo extends App {
 
   /*
     Demo client
-   */
 
   for (creds <- List(("smppclient1", "password"), ("user2", "pass2"))) {
     val client = actorSystem.actorOf(SmppClient.props(SmppClientConfig(new InetSocketAddress("localhost", 2775)), {
@@ -59,5 +60,28 @@ object Demo extends App {
       println(x)
     }
   }
+   */
+
+  val c = SmppClient.connect(SmppClientConfig(new InetSocketAddress("ec2-184-73-153-156.compute-1.amazonaws.com", 2775)), {
+    case d: SmscRequest => GenericNack(CommandStatus.ESME_RINVCMDID, d.sequenceNumber)
+  }, "client")
+
+  implicit def str2CoctetString(s: String): COctetString = new COctetString(s)(java.nio.charset.Charset.forName("ASCII"))
+
+  c ? Bind("any", "any") onComplete { x =>
+    val f = c ? SendRawPdu(SubmitSm(_, "tyntec", TypeOfNumber.International, NumericPlanIndicator.E164, "15094302095", TypeOfNumber.International,
+    NumericPlanIndicator.E164, "15094302095", EsmClass(MessagingMode.Default, MessageType.NormalMessage), 0x0,
+    Priority.Level0, NullTime, NullTime, RegisteredDelivery(0x0.toByte), false, DataCodingScheme.SmscDefaultAlphabet, 0x0, 0x0, OctetString.empty, Nil))
+
+    f.onComplete {
+      case Success(SubmitSmResp(commandStatus, _, _)) => println(s"command status was $commandStatus")
+    }
+  }
+
+  actorSystem.actorOf(Props(new Actor() {
+    override def receive: Actor.Receive = ???
+  }))
+
+
 
 }

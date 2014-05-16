@@ -1,6 +1,6 @@
 package akkasmpp.actors
 
-import akka.actor.{ActorSystem, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
+import akka.actor.{ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
 import akkasmpp.protocol.{EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
@@ -23,7 +23,7 @@ object SmppClient {
 
   type ClientReceive = PartialFunction[SmscRequest, EsmeResponse]
   def props(config: SmppClientConfig, receiver: ClientReceive) = Props(classOf[SmppClient], config, receiver)
-  def connect(config: SmppClientConfig, receive: ClientReceive, name: String)(implicit ac: ActorSystem) = {
+  def connect(config: SmppClientConfig, receive: ClientReceive, name: String)(implicit ac: ActorRefFactory) = {
     ac.actorOf(SmppClient.props(config, receive), name)
   }
 
@@ -117,7 +117,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
   def connecting: Actor.Receive = {
     case CommandFailed(_: Connect) =>
       log.error("Network connection failed")
-      context stop self
+      throw new Exception("Network connection failed.")
     case c @ Connected(remote, local) =>
       log.debug(s"Connection established to server at $remote")
 
@@ -136,7 +136,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
       context.watch(sender)
       sender ! Tcp.Register(handler)
       unstashAll()
-      config.autoBind.foreach { self ! _ } // send bind command to yourself if it's configured for autobind
+      config.autoBind.foreach { self.tell(_, context.parent) } // send bind command to yourself if it's configured for autobind
       context.become(bind(pipeline, handler))
     case _ => stash()
   }
@@ -154,13 +154,15 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
       log.info(s"Making bind request $cmd")
       connection ! wire.Command(cmd)
       unstashAll()
-      context.become(binding(wire, connection))
+      // XXX: receive timeout?
+      context.become(binding(wire, connection, sender))
     case _ => stash()
   }
 
-  def binding(wire: SmppPipeLine, connection: ActorRef): Actor.Receive = {
+  def binding(wire: SmppPipeLine, connection: ActorRef, requester: ActorRef): Actor.Receive = {
     // Future improvement: Type tags to ensure the response is the same as the request?
     case wire.Event(p: BindRespLike) =>
+      requester ! p
       if (p.commandStatus == CommandStatus.ESME_ROK) {
         unstashAll()
         log.info(s"Bound: $p")
@@ -171,7 +173,6 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
             context.system.scheduler.schedule(f/2, f, self, SmppClient.SendEnquireLink)(context.dispatcher)
           case _ =>
         }
-
         context.become(bound(wire, connection))
       } else {
         throw new Exception(s"bind failed! $p")
