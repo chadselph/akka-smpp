@@ -9,5 +9,5 @@ trait SequenceNumberGenerator {
 
 class AtomicIntegerSequenceNumberGenerator extends SequenceNumberGenerator {
   val ai = new AtomicInteger()
-  def next = ai.getAndIncrement
+  def next = 1 + (ai.getAndIncrement % 0x7FFFFFFF)
 }
