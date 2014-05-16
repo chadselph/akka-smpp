@@ -15,3 +15,6 @@ libraryDependencies += "com.typesafe.akka" %% "akka-slf4j" % "2.3-M2"
 libraryDependencies += "com.cloudhopper" % "ch-commons-charset" % "3.0.2"
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "2.0" % "test"
+
+net.virtualvoid.sbt.graph.Plugin.graphSettings
+
