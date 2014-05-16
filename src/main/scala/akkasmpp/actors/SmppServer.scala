@@ -5,12 +5,14 @@ import akka.actor.{ActorSystem, Actor, Deploy, ActorRef, ActorLogging, Stash, Pr
 import scala.concurrent.duration._
 import akka.io.{TcpReadWriteAdapter, IO, Tcp, TcpPipelineHandler}
 import akka.io.TcpPipelineHandler.WithinActorContext
-import akkasmpp.protocol.{EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{SmppTypes, BindRespLike, BindLike, BindTransmitterResp, EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppServerHandler.SmppPipeLine
 import java.nio.charset.Charset
 import scala.concurrent.ExecutionContext
 import akkasmpp.actors.SmppServer.SendRawPdu
+import akkasmpp.protocol.CommandStatus.CommandStatus
+import akkasmpp.protocol.CommandStatus
 
 case class SmppServerConfig(bindAddr: InetSocketAddress, enquireLinkTimeout: Duration = 60.seconds)
 
@@ -78,19 +80,29 @@ abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRe
 
   override def receive: Actor.Receive = binding
 
+  type BindResponse = (CommandStatus, SmppTypes.Integer, Option[COctetString], Option[Tlv]) => BindRespLike
   // XXX: figure out how to incorporate bind auth
-  def binding: Actor.Receive = {
-    case wire.Event(bt: BindTransceiver) =>
-      log.info(s"got a bind like message $bt")
-      sender ! wire.Command(BindTransceiverResp(CommandStatus.ESME_ROK,
-        bt.sequenceNumber, Some(new COctetString(serverSystemId)),
-        Some(Tlv(Tag.SC_interface_version, new OctetString(0x34: Byte)))
-      ))
-      context.become(bound)
-    case wire.Event(br: BindReceiver) =>
-    case wire.Event(bt: BindTransmitter) =>
+  private def doBind(bindRecv: BindLike, respFactory: BindResponse) = {
+    log.info(s"got a bind like message $bindRecv")
+    respFactory(CommandStatus.ESME_ROK,
+      bindRecv.sequenceNumber, Some(new COctetString(serverSystemId)),
+      Some(Tlv(Tag.SC_interface_version, new OctetString(0x34: Byte))))
   }
 
+  def binding: Actor.Receive = {
+    case wire.Event(bt: BindTransceiver) =>
+      sender ! wire.Command(doBind(bt, BindTransceiverResp.apply))
+      context.become(bound)
+    case wire.Event(br: BindReceiver) =>
+      sender ! wire.Command(doBind(br, BindTransceiverResp.apply))
+      context.become(bound)
+    case wire.Event(bt: BindTransmitter) =>
+      sender ! wire.Command(doBind(bt, BindTransceiverResp.apply))
+      context.become(bound)
+
+  }
+
+  // XXX: split out into bound transmit vs bound receive
   def bound: Actor.Receive
 
   def smscRequestReply: Actor.Receive = {
