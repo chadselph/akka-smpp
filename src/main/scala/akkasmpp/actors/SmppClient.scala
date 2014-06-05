@@ -2,7 +2,7 @@ package akkasmpp.actors
 
 import akka.actor.{ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
-import akkasmpp.protocol.{EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, DeliverSmResp, DeliverSm, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
@@ -10,7 +10,7 @@ import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
-import akkasmpp.actors.SmppClient.{ClientReceive, Bind, Did}
+import akkasmpp.actors.SmppClient.{ClientReceive, Bind}
 import scala.concurrent.duration.Duration
 import javax.net.ssl.SSLContext
 import akkasmpp.ssl.SslUtil
@@ -109,14 +109,14 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
   manager ! Connect(config.bindTo, timeout = Some(3.seconds))
 
   override def postStop() = {
-    manager ! Close
+    // XXX: do we ever want this?
+    // manager ! Close
   }
 
   def receive = connecting
 
   def connecting: Actor.Receive = {
     case CommandFailed(_: Connect) =>
-      log.error("Network connection failed")
       throw new Exception("Network connection failed.")
     case c @ Connected(remote, local) =>
       log.debug(s"Connection established to server at $remote")
@@ -178,7 +178,6 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
         throw new Exception(s"bind failed! $p")
       }
     case c: SmppClient.Command => stash()
-    case x => log.info(s"unexpected event! $x")
 
   }
 
@@ -221,23 +220,9 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
       connection ! wire.Command(EnquireLinkResp(seq))
     case wire.Event(msg: SmscRequest) if receiver.isDefinedAt(msg) =>
       // XXX: also make this async for Futures
-      connection ! wire.Command(receiver(msg))
-      /*
-    case wire.Event(msg: DeliverSm) =>
-      log.info(s"Received message $msg")
-      // XXX: decode actual message
-      implicit val encoding = java.nio.charset.Charset.forName("UTF-8")
-      val cmd = SmppClient.ReceiveMessage(msg.shortMessage.toString,
-        to = Did(msg.destinationAddr.asString, msg.destAddrTon, msg.destAddrNpi),
-        from = Did(msg.sourceAddr.asString, msg.sourceAddrTon, msg.sourceAddrNpi)
-      )
-      context.parent ! cmd
-      connection ! wire.Command(DeliverSmResp(CommandStatus.ESME_ROK, msg.sequenceNumber, Some(COctetString.empty)))
-      */
-    /*
-    case wire.Event(msg: DataSm) =>
-    case wire.Event(msg: AlertNotification) =>
-    */
+      val resp = receiver(msg)
+      log.debug(s"Replying to $msg with $resp")
+      connection ! wire.Command(resp)
     case wire.Event(pdu: Pdu) =>
       log.warning(s"Received unsupported pdu: $pdu responding with GenericNack")
       connection ! wire.Command(GenericNack(CommandStatus.ESME_RCANCELFAIL, pdu.sequenceNumber))
