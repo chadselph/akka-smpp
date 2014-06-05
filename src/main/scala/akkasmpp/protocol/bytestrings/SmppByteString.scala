@@ -122,7 +122,7 @@ object SmppByteString {
       this approach will basically just throw an exception.
      */
     def getCommandId = CommandId(bi.getInt)
-    def getCommandStatus = CommandStatus(bi.getInt)
+    def getCommandStatus = CommandStatus.getOrInvalid(bi.getInt)
     def getTypeOfNumber = TypeOfNumber(bi.getByte)
     def getNumericPlanIndicator = NumericPlanIndicator(bi.getByte)
     def getPriority = Priority.getOrInvalid(bi.getByte)

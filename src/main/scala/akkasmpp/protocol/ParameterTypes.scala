@@ -178,7 +178,7 @@ object NumericPlanIndicator extends Enumeration {
   val WapClientId = Value(0x18)
 }
 
-object CommandStatus extends Enumeration {
+object CommandStatus extends FlexibleEnumeration {
 
   type CommandStatus = Value
   val ESME_ROK  = Value(0x00000000) //  No Error
