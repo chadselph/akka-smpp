@@ -2,7 +2,7 @@ package akkasmpp.actors
 
 import akka.actor.{ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
-import akkasmpp.protocol.{EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{UnbindResp, Unbind, EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
@@ -10,7 +10,7 @@ import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
-import akkasmpp.actors.SmppClient.{ClientReceive, Bind}
+import akkasmpp.actors.SmppClient.{BindFailed, UnbindReceived, PeerClosed, ConnectionFailed, ClientReceive, Bind}
 import scala.concurrent.duration.Duration
 import javax.net.ssl.SSLContext
 import akkasmpp.ssl.SslUtil
@@ -20,6 +20,12 @@ import akkasmpp.ssl.SslUtil
  */
 
 object SmppClient {
+
+  abstract class SmppClientException(msg: String) extends Exception(msg)
+  class PeerClosed extends SmppClientException("Peer dropped the connection unexpectedly.")
+  class UnbindReceived extends SmppClientException("Peer sent Unbind request")
+  class ConnectionFailed extends SmppClientException("Could not make TCP connection to the server.")
+  class BindFailed(val errorCode: CommandStatus) extends SmppClientException("Bind failed with " + errorCode)
 
   type ClientReceive = PartialFunction[SmscRequest, EsmeResponse]
   def props(config: SmppClientConfig, receiver: ClientReceive) = Props(classOf[SmppClient], config, receiver)
@@ -96,7 +102,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
 
   type SmppPipeLine = TcpPipelineHandler.Init[WithinActorContext, Pdu, Pdu]
 
-  import akka.io.Tcp._
+  import akka.io.Tcp.{Connect, Connected, CommandFailed, Close, PeerClosed}
   import scala.concurrent.duration._
   import context.system
 
@@ -117,7 +123,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
 
   def connecting: Actor.Receive = {
     case CommandFailed(_: Connect) =>
-      throw new Exception("Network connection failed.")
+      throw new ConnectionFailed()
     case c @ Connected(remote, local) =>
       log.debug(s"Connection established to server at $remote")
 
@@ -175,7 +181,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
         }
         context.become(bound(wire, connection))
       } else {
-        throw new Exception(s"bind failed! $p")
+        throw new BindFailed(p.commandStatus)
       }
     case c: SmppClient.Command => stash()
 
@@ -223,11 +229,19 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
       val resp = receiver(msg)
       log.debug(s"Replying to $msg with $resp")
       connection ! wire.Command(resp)
+
+    case wire.Event(Unbind(seqN)) =>
+      // XXX: what will happen to "inflight" requests?
+      log.info(s"Received Unbind, closing connection")
+      connection ! wire.Command(UnbindResp(CommandStatus.ESME_ROK, seqN))
+      manager ! Close
+      throw new UnbindReceived()
+
     case wire.Event(pdu: Pdu) =>
       log.warning(s"Received unsupported pdu: $pdu responding with GenericNack")
       connection ! wire.Command(GenericNack(CommandStatus.ESME_RCANCELFAIL, pdu.sequenceNumber))
 
-    case PeerClosed => throw new Exception("PeerClosed")
+    case PeerClosed => throw new PeerClosed()
 
   }
 }
