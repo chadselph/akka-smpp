@@ -5,14 +5,13 @@ import akka.actor.{ActorSystem, Actor, Deploy, ActorRef, ActorLogging, Stash, Pr
 import scala.concurrent.duration._
 import akka.io.{TcpReadWriteAdapter, IO, Tcp, TcpPipelineHandler}
 import akka.io.TcpPipelineHandler.WithinActorContext
-import akkasmpp.protocol.{SmppTypes, BindRespLike, BindLike, BindTransmitterResp, EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{PduLogger, SmppTypes, BindRespLike, BindLike, BindTransmitterResp, EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppServerHandler.SmppPipeLine
 import java.nio.charset.Charset
 import scala.concurrent.ExecutionContext
 import akkasmpp.actors.SmppServer.SendRawPdu
 import akkasmpp.protocol.CommandStatus.CommandStatus
-import akkasmpp.protocol.CommandStatus
 
 case class SmppServerConfig(bindAddr: InetSocketAddress, enquireLinkTimeout: Duration = 60.seconds)
 
@@ -20,8 +19,9 @@ object SmppServer {
 
   case class SendRawPdu(p: (SequenceNumber) => SmscRequest)
 
-  def props(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler) =
-    Props(classOf[SmppServer], config, handlerSpec)
+  def props(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler,
+            pduLogger: PduLogger = PduLogger.default) =
+    Props(classOf[SmppServer], config, handlerSpec, pduLogger)
 
   def run(host: String, port: Int, enquireLinkTimeout: Duration = 60.seconds)
          (actor: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler)
@@ -32,7 +32,8 @@ object SmppServer {
   }
 }
 
-class SmppServer(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler)
+class SmppServer(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler,
+                 pduLogger: PduLogger = PduLogger.default)
   extends Actor with ActorLogging with Stash {
 
   import context.system
@@ -56,7 +57,7 @@ class SmppServer(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppP
        */
       val connection = sender
       log.debug(s"connection is $connection")
-      val init = TcpPipelineHandler.withLogger(log, new SmppFramePipeline >> new TcpReadWriteAdapter)
+      val init = TcpPipelineHandler.withLogger(log, new SmppFramePipeline(pduLogger) >> new TcpReadWriteAdapter)
       val handler = context.actorOf(Props(handlerSpec(init, connection)))
       val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler).withDeploy(Deploy.local))
       sender ! Register(pipeline)

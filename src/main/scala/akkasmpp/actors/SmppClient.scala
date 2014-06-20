@@ -1,8 +1,8 @@
 package akkasmpp.actors
 
-import akka.actor.{ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
+import akka.actor.{OneForOneStrategy, ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
-import akkasmpp.protocol.{UnbindResp, Unbind, EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{PduLogger, UnbindResp, Unbind, EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
 import akka.io.TcpPipelineHandler.WithinActorContext
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
@@ -12,8 +12,9 @@ import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppClient.{BindFailed, UnbindReceived, PeerClosed, ConnectionFailed, ClientReceive, Bind}
 import scala.concurrent.duration.Duration
-import javax.net.ssl.SSLContext
+import javax.net.ssl.{SSLException, SSLContext}
 import akkasmpp.ssl.SslUtil
+import akka.actor.SupervisorStrategy.Escalate
 
 /**
  * Basic ESME behaviors
@@ -28,9 +29,10 @@ object SmppClient {
   class BindFailed(val errorCode: CommandStatus) extends SmppClientException("Bind failed with " + errorCode)
 
   type ClientReceive = PartialFunction[SmscRequest, EsmeResponse]
-  def props(config: SmppClientConfig, receiver: ClientReceive) = Props(classOf[SmppClient], config, receiver)
-  def connect(config: SmppClientConfig, receive: ClientReceive, name: String)(implicit ac: ActorRefFactory) = {
-    ac.actorOf(SmppClient.props(config, receive), name)
+  def props(config: SmppClientConfig, receiver: ClientReceive, pduLogger: PduLogger = PduLogger.default) =
+    Props(classOf[SmppClient], config, receiver, pduLogger)
+  def connect(config: SmppClientConfig, receive: ClientReceive, name: String, pduLogger: PduLogger = PduLogger.default)(implicit ac: ActorRefFactory) = {
+    ac.actorOf(SmppClient.props(config, receive, pduLogger), name)
   }
 
   object Implicits {
@@ -97,12 +99,12 @@ case class SmppClientConfig(bindTo: InetSocketAddress, enquireLinkTimer: Duratio
 /**
  * Example SmppClient using the PDU layer
  */
-class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
+class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: PduLogger = PduLogger.default)
   extends SmppActor with ActorLogging with Stash {
 
   type SmppPipeLine = TcpPipelineHandler.Init[WithinActorContext, Pdu, Pdu]
 
-  import akka.io.Tcp.{Connect, Connected, CommandFailed, Close, PeerClosed}
+  import akka.io.Tcp.{Connect, Connected, CommandFailed, Close, ConnectionClosed}
   import scala.concurrent.duration._
   import context.system
 
@@ -114,9 +116,8 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
   log.debug(s"Connecting to server at " + config.bindTo.toString)
   manager ! Connect(config.bindTo, timeout = Some(3.seconds))
 
-  override def postStop() = {
-    // XXX: do we ever want this?
-    // manager ! Close
+  override val supervisorStrategy = OneForOneStrategy() {
+    case _: SSLException => Escalate
   }
 
   def receive = connecting
@@ -131,9 +132,9 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
       Decide if to do a TLS handshake or not
        */
       val stages = config.sslContext match {
-        case None => new SmppFramePipeline >> new TcpReadWriteAdapter
+        case None => new SmppFramePipeline(pduLogger) >> new TcpReadWriteAdapter
         case Some(sslContext) =>
-          new SmppFramePipeline >> new TcpReadWriteAdapter >>
+          new SmppFramePipeline(pduLogger) >> new TcpReadWriteAdapter >>
             new SslTlsSupport(SslUtil.sslEngine(sslContext, remote, client = true))
       }
 
@@ -162,6 +163,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
       unstashAll()
       // XXX: receive timeout?
       context.become(binding(wire, connection, sender))
+    case cc: ConnectionClosed => throw new PeerClosed()
     case _ => stash()
   }
 
@@ -183,6 +185,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
       } else {
         throw new BindFailed(p.commandStatus)
       }
+    case cc: ConnectionClosed => throw new PeerClosed()
     case c: SmppClient.Command => stash()
 
   }
@@ -241,7 +244,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive)
       log.warning(s"Received unsupported pdu: $pdu responding with GenericNack")
       connection ! wire.Command(GenericNack(CommandStatus.ESME_RCANCELFAIL, pdu.sequenceNumber))
 
-    case PeerClosed => throw new PeerClosed()
+    case cc: ConnectionClosed => throw new PeerClosed()
 
   }
 }

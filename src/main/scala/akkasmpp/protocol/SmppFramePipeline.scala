@@ -8,7 +8,7 @@ import scala.annotation.tailrec
 /**
  * Decodes bytestrings into PDUs, vice versa.
  */
-class SmppFramePipeline extends SymmetricPipelineStage[PipelineContext, Pdu, ByteString] {
+class SmppFramePipeline(logger: PduLogger) extends SymmetricPipelineStage[PipelineContext, Pdu, ByteString] {
 
   implicit val charencoding = java.nio.charset.Charset.forName("UTF-8")
   implicit val byteOrder = ByteOrder.BIG_ENDIAN
@@ -21,6 +21,7 @@ class SmppFramePipeline extends SymmetricPipelineStage[PipelineContext, Pdu, Byt
      * PDU -> ByteString
      */
     override def commandPipeline: (Pdu) => Iterable[this.type#Result] = { pdu =>
+      logger.logOutgoing(pdu)
       ctx.singleCommand(pdu.toByteString)
     }
 
@@ -45,7 +46,9 @@ class SmppFramePipeline extends SymmetricPipelineStage[PipelineContext, Pdu, Byt
       } else {
         val commandLength = bs.iterator.getInt
         val (pdu, extra) = bs.splitAt(commandLength)
-        pduFromBuffer(extra, Pdu.fromBytes(pdu.iterator) :: acc)
+        val parsed = Pdu.fromBytes(pdu.iterator)
+        logger.logIncoming(parsed)
+        pduFromBuffer(extra, parsed :: acc)
       }
     }
   }
