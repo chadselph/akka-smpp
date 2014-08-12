@@ -5,11 +5,10 @@ import akka.actor.{ActorSystem, Actor, Deploy, ActorRef, ActorLogging, Stash, Pr
 import scala.concurrent.duration._
 import akka.io.{TcpReadWriteAdapter, IO, Tcp, TcpPipelineHandler}
 import akka.io.TcpPipelineHandler.WithinActorContext
-import akkasmpp.protocol.{PduLogger, SmppTypes, BindRespLike, BindLike, BindTransmitterResp, EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
+import akkasmpp.protocol.{PduLogger, SmppTypes, BindRespLike, BindLike, EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppServerHandler.SmppPipeLine
 import java.nio.charset.Charset
-import scala.concurrent.ExecutionContext
 import akkasmpp.actors.SmppServer.SendRawPdu
 import akkasmpp.protocol.CommandStatus.CommandStatus
 
@@ -71,7 +70,7 @@ object SmppServerHandler {
   def props(wire: SmppPipeLine) = Props(classOf[SmppServerHandler], wire)
 }
 
-abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRef)(implicit val ec: ExecutionContext)
+abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRef)
   extends SmppActor with ActorLogging {
 
   implicit val cs = Charset.forName("UTF-8")

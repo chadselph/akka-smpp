@@ -8,7 +8,7 @@ import scala.concurrent.{ExecutionContext, Future}
 trait SmppPartials extends SmppActor with ActorLogging {
 
   val wire: SmppServerHandler.SmppPipeLine
-  implicit val ec: ExecutionContext
+  implicit val ec: ExecutionContext = context.dispatcher
 
   def bind(cb: (BindLike) => BindRespLike): Receive = {
     case wire.Event(b: BindLike) => sender ! wire.Command(cb(b))
