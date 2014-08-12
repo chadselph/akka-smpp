@@ -1,9 +1,10 @@
 import akkasmpp.protocol.bytestrings.ReadPdu
 import akkasmpp.protocol.EsmClass.{MessageType, MessagingMode}
 import akkasmpp.protocol.{CommandStatus, CommandId, BindTransceiverResp, Pdu, OctetString, COctetString, DataCodingScheme, RegisteredDelivery, NullTime, Priority, EsmClass, NumericPlanIndicator, TypeOfNumber, ServiceType, DeliverSm}
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, FlatSpec}
 
-class ReadPduTest extends FlatSpec with Matchers with ByteStringHelpers {
+class ReadPduTest extends FlatSpec with Matchers with ByteStringHelpers with GeneratorDrivenPropertyChecks {
 
   implicit val ce = java.nio.charset.Charset.forName("UTF-8")
 
@@ -44,6 +45,12 @@ class ReadPduTest extends FlatSpec with Matchers with ByteStringHelpers {
         bindResp.commandStatus should be(CommandStatus.ESME_ROK)
         bindResp.sequenceNumber should be(0)
         bindResp.systemId should be(Some(new COctetString("abc")))
+    }
+  }
+
+  "pdu round trip" should "always get back from where we started" in {
+    forAll(PduGens.pduGen) { pdu =>
+      ReadPdu.readPdu(pdu.toByteString.iterator) should equal (pdu)
     }
   }
 }
