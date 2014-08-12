@@ -22,7 +22,7 @@ object InformationElementIdentifier extends Enumeration {
 
 object UserDataHeader {
   def fromShortMessage(bytes: OctetString): UserDataHeader = {
-    val len = bytes.data(0)
+    val len = bytes.data(0) & 255
 
     def rec(ieStart: Int): List[InformationElement] = {
       if(ieStart >= len - 1) Nil
@@ -38,9 +38,9 @@ object UserDataHeader {
 }
 
 case class UserDataHeader(elements: Seq[InformationElement]) {
-  val dataLength = elements.map(_.dataLength + 2).sum
+  val dataLength: Byte = (elements.map(_.dataLength + 2).sum & 255).toByte
 }
 
 case class InformationElement(identifier: InformationElementIdentifier.InformationElementIdentifier, data: Array[Byte]) {
-  val dataLength = data.length
+  val dataLength: Byte = (data.length & 255).toByte
 }

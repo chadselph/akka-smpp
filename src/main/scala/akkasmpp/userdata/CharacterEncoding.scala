@@ -1,42 +1,46 @@
 package akkasmpp.userdata
 
-import com.cloudhopper.commons.charset.{ISO88591Charset, GSMCharset, UCS2Charset}
-import scala.annotation.tailrec
+import java.nio.ByteBuffer
+
 import akkasmpp.protocol.DataCodingScheme
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
 import akkasmpp.userdata.Charset.CodePoint
-import java.nio.ByteBuffer
+import com.cloudhopper.commons.charset.{GSMCharset, ISO88591Charset, UCS2Charset}
+
+import scala.annotation.tailrec
 
 trait CharacterEncodingStrategy {
-
-  import StringUtil.Implicits._
 
   def chooseEncoding(msg: String): Charset
 
   def stringToSegments(msg: String): List[Array[Byte]] = stringToSegments(msg, chooseEncoding(msg))
 
-  def stringToSegments(msg: String, charset: Charset): List[Array[Byte]] = {
+  def stringToSegments(msg: String, charset: Charset, udhSize: Int = 0): List[Array[Byte]] = {
+    takeCharUnits(msg, charset, charset.maxCharUnitsInSegment(udhSize)) match {
+      case (encoded, None) => List(encoded)
+      case (encoded, Some(remaining)) => encoded :: stringToSegments(remaining, charset, udhSize)
+    }
+  }
 
-    def countFoldsWhile[A, B](initial: A)(seq: Traversable[B])(op: (A, B) => A)(pred: A => Boolean) = {
-      @tailrec
-      def rec(times: Int, runningVal: A, seq: Traversable[B], op: (A,B) => A, pred: A => Boolean): Int = {
-        if (seq.isEmpty) times
-        else {
-          val nextVal = op(runningVal, seq.head)
-          if (!pred(nextVal)) times
-          else rec(times + 1, nextVal, seq.tail, op, pred)
+  def takeCharUnits(msg: String, encoding: Charset, nCharUnits: Int): (Array[Byte], Option[String]) = {
+    @tailrec
+    def findSplit(index: Int, totalUnits: Int): Int = {
+      if (index >= msg.length) {
+        msg.length // we've gone too far.
+      } else {
+        val cp = msg.codePointAt(index)
+        val codeUnits = encoding.charUnits(cp)
+        if (totalUnits + codeUnits > nCharUnits) {
+          // this means we can't add the next character, it puts us over nCharUnits
+          index
+        } else {
+          findSplit(index + Character.charCount(cp), totalUnits + codeUnits)
         }
       }
-      rec(0, initial, seq, op, pred)
     }
-
-    val codepoints = msg.codePoints.toList
-    val folds = countFoldsWhile(0)(codepoints)(_ + charset.charUnits(_))(_ <= charset.maxCharUnitsInSegment(0))
-    if (folds == codepoints.length) List(charset.encode(msg))
-    else {
-      val (piece, rest) = msg.splitAt(folds)
-      charset.encode(piece) :: stringToSegments(rest, charset)
-    }
+    val split = findSplit(0, 0)
+    val (segment, extra) = msg splitAt split
+    (encoding.encode(segment), if (extra.isEmpty) None else Some(extra))
   }
 
   def segmentsToString(segments: Seq[Array[Byte]], charset: Charset) = segments.map(charset.decode).mkString
@@ -57,8 +61,6 @@ object Charset {
 }
 
 trait Charset {
-
-  import Charset.{DCSMapping, CodePoint}
 
   def encode(s: CharSequence): Array[Byte]
   def decode(ba: Array[Byte]): String
@@ -105,11 +107,5 @@ object LosslessEncodingStrategy extends CharacterEncodingStrategy {
   def chooseEncoding(msg: String) = {
     if (GSMCharset.canRepresent(msg)) DefaultGsmCharset
     else DefaultUCS2Charset
-  }
-}
-
-object ConcatLosslessEncodingStrategy extends CharacterEncodingStrategy {
-  def chooseEncoding(msg: String): Charset = {
-    LosslessEncodingStrategy.chooseEncoding(msg)
   }
 }
