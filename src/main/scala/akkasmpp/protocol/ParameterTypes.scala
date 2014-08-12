@@ -38,6 +38,7 @@ object COctetString {
   def apply(bytes: Int*) = {
     new COctetString(bytes.map(_.toByte).toArray)
   }
+  def ascii(s: String) = new COctetString(s.getBytes("ASCII"))
 }
 
 class COctetString(val data: Array[Byte]) {
@@ -73,15 +74,15 @@ object OctetString {
  */
 class OctetString(val data: Array[Byte]) {
 
-  def this(b: Byte) = this(Array(b))
-  def size = data.size
-  def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
-  override def equals(other: Any) = other match {
-    case o: OctetString => Arrays.equals(data, o.data)
-    case _ => false
-  }
-  override def toString = {
-    data.map("%02X".format(_)).mkString("<OctetString: ", "", ">")
+      def this(b: Byte) = this(Array(b))
+      def size = data.size
+      def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
+      override def equals(other: Any) = other match {
+        case o: OctetString => Arrays.equals(data, o.data)
+        case _ => false
+      }
+      override def toString = {
+        data.map("%02X".format(_)).mkString("<OctetString: ", "", ">")
   }
 }
 
