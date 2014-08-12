@@ -43,4 +43,28 @@ case class PduBuilder(defaultServiceType: ServiceType.ServiceType = ServiceType.
       dataCoding, smDefaultMsgId, shortMessage.size.toByte, shortMessage, tlvs)
   }
 
+  def deliverSm(serviceType: ServiceType.ServiceType = defaultServiceType,
+               sourceAddrTon: TypeOfNumber.TypeOfNumber = defaultTypeOfNumber,
+               sourceAddrNpi: NumericPlanIndicator.NumericPlanIndicator = defaultNumericPlanIndicator,
+               sourceAddr: COctetString,
+               destAddrTon: TypeOfNumber.TypeOfNumber = defaultTypeOfNumber,
+               destAddrNpi: NumericPlanIndicator.NumericPlanIndicator = defaultNumericPlanIndicator,
+               destinationAddr: COctetString,
+               esmClass: EsmClass = defaultEsmClass,
+               protocolId: Byte = defaultProtocolId,
+               priorityFlag: Priority.Priority = defaultPriority,
+               scheduleDeliveryTime: TimeFormat = NullTime,
+               validityPeriod: TimeFormat = NullTime,
+               registeredDelivery: RegisteredDelivery = defaultRegisteredDelivery,
+               replaceIfPresentFlag: Boolean = defaultReplaceIfPresentFlag,
+               dataCoding: DataCodingScheme.DataCodingScheme = defaultDataCodingScheme,
+               smDefaultMsgId: Byte = 0,
+               shortMessage: OctetString,
+               tlvs: List[Tlv] = defaultTlvs
+                ): (SequenceNumber) => DeliverSm = {
+    DeliverSm(_, serviceType, sourceAddrTon, sourceAddrNpi, sourceAddr, destAddrTon, destAddrNpi, destinationAddr,
+      esmClass, protocolId, priorityFlag, scheduleDeliveryTime, validityPeriod, registeredDelivery, replaceIfPresentFlag,
+      dataCoding, smDefaultMsgId, shortMessage.size.toByte, shortMessage, tlvs)
+  }
+
 }
