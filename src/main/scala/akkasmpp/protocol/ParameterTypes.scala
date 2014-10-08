@@ -335,10 +335,28 @@ object EsmClass {
 
 case class EsmClass(messagingMode: EsmClass.MessagingMode.MessagingMode, messageType: EsmClass.MessageType.MessageType, features: EsmClass.Features.ValueSet)
 
-abstract class TimeFormat
-case object NullTime extends TimeFormat
-case class RelativeTimeFormat(years: Int = 0, months: Int = 0, days: Int = 0, hours: Int = 0, minutes: Int = 0, seconds: Int = 0) extends TimeFormat
-case class AbsoluteTimeFormat(year: Int = 0, month: Int = 0, day: Int = 0, hour: Int = 0, minute: Int = 0, second: Int = 0) extends TimeFormat
+sealed trait TimeFormat {
+  def serialize: COctetString
+}
+case object NullTime extends TimeFormat {
+  override def serialize: COctetString = COctetString.empty
+}
+case class RelativeTimeFormat(years: Int = 0, months: Int = 0, days: Int = 0, hours: Int = 0, minutes: Int = 0, seconds: Int = 0) extends TimeFormat {
+
+  override def serialize: COctetString = COctetString.ascii(
+    List(years, months, days, hours, minutes, seconds).map(t => f"$t%02d").mkString("", "", "000R"))
+}
+case class AbsoluteTimeFormat(year: Int = 0, month: Int = 0, day: Int = 0, hour: Int = 0, minute: Int = 0, second: Int = 0) extends TimeFormat {
+  override def serialize: COctetString = ???
+}
+
+/**
+ * If you just want to pass through what someone else gives you
+ * @param input String of the time format
+ */
+case class OpaqueTimeFormat(input: COctetString) extends TimeFormat {
+  override def serialize: COctetString = input
+}
 
 object RegisteredDelivery {
 

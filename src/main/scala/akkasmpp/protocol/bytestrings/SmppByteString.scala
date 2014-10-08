@@ -1,16 +1,17 @@
 package akkasmpp.protocol.bytestrings
 
-import akka.util.{ByteIterator, ByteStringBuilder}
 import java.nio.charset.Charset
-import akkasmpp.protocol.{Tag, OctetString, COctetString, MessageState, DataCodingScheme, Priority, NumericPlanIndicator, TypeOfNumber, CommandStatus, CommandId, EsmClass, Tlv, RegisteredDelivery, AbsoluteTimeFormat, RelativeTimeFormat, NullTime, TimeFormat}
+
+import akka.util.{ByteIterator, ByteStringBuilder}
 import akkasmpp.protocol.CommandId.CommandId
 import akkasmpp.protocol.CommandStatus.CommandStatus
-import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
-import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
-import akkasmpp.protocol.Priority.Priority
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
 import akkasmpp.protocol.MessageState.MessageState
+import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
+import akkasmpp.protocol.Priority.Priority
 import akkasmpp.protocol.ServiceType.ServiceType
+import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
+import akkasmpp.protocol.{COctetString, CommandId, CommandStatus, DataCodingScheme, EsmClass, MessageState, NumericPlanIndicator, OctetString, OpaqueTimeFormat, Priority, RegisteredDelivery, Tag, TimeFormat, Tlv, TypeOfNumber}
 
 /**
  * Helpers to parse and encode SMPP PDUs into akka ByteStrings
@@ -75,10 +76,8 @@ object SmppByteString {
       val bits = esm.features.toBitMask(0) | esm.messageType.id | esm.messagingMode.id
       bsb.putByte(bits.toByte)
     }
-    def putTime(t: TimeFormat) = t match {
-      case NullTime => bsb.putByte(0)
-      case RelativeTimeFormat(y, mon, d, h, min, s) => ??? // XXX: maybe switch to Joda-time? Doesn't seem too important
-      case AbsoluteTimeFormat(y, mon, d, h, min, s) => ???
+    def putTime(t: TimeFormat) = {
+      bsb.putCOctetString(t.serialize)
     }
     def putRegisteredDelivery(rd: RegisteredDelivery) = rd match {
       case RegisteredDelivery(smscDelivery, smseAck, imNotif) =>
@@ -136,7 +135,7 @@ object SmppByteString {
     def getTime = {
       // XXX: parse time formats
       val time = bi.getCOctetString
-      NullTime
+      OpaqueTimeFormat(time)
     }
 
     def getRegisteredDelivery = RegisteredDelivery(bi.getByte)
