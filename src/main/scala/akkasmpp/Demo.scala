@@ -1,14 +1,16 @@
 package akkasmpp
-import akka.io.{IO, Tcp}
-import akka.actor.{Actor, Props, ActorSystem}
-import akka.pattern.ask
-import akkasmpp.actors.{SmppPartials, SmppServerHandler, SmppServerConfig, SmppServer, SmppClientConfig, SmppClient}
 import java.net.InetSocketAddress
-import akkasmpp.actors.SmppClient.{SendRawPdu, Bind, SendMessageAck, SendMessage, Did}
+
+import akka.actor.{Actor, ActorSystem, Props}
+import akka.io.{IO, Tcp}
+import akka.pattern.ask
 import akka.util.Timeout
+import akkasmpp.actors.SmppClient.{Bind, SendRawPdu}
+import akkasmpp.actors.{SmppClient, SmppClientConfig, SmppPartials, SmppServer, SmppServerHandler}
+import akkasmpp.protocol.EsmClass.{MessageType, MessagingMode}
+import akkasmpp.protocol.{COctetString, CommandStatus, DataCodingScheme, EsmClass, GenericNack, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, SmscRequest, SubmitSm, SubmitSmResp, TypeOfNumber}
+
 import scala.concurrent.duration._
-import akkasmpp.protocol.{OctetString, DataCodingScheme, RegisteredDelivery, NullTime, Priority, EsmClass, NumericPlanIndicator, TypeOfNumber, GenericNack, SmscRequest, DeliverSmResp, DeliverSm, EnquireLink, COctetString, CommandStatus, SubmitSmResp, SubmitSm, Pdu}
-import akkasmpp.protocol.EsmClass.{Features, MessageType, MessagingMode}
 import scala.util.Success
 
 object Demo extends App {
@@ -32,7 +34,6 @@ object Demo extends App {
           log.info(s"SubmitSm with TLVs of ${ss.tlvs}")
           sender ! wire.Command(SubmitSmResp(
             CommandStatus.ESME_ROK, ss.sequenceNumber, Some(new COctetString("abcde"))))
-          val forwarded = ss.copy(tlvs = Nil)
       }
     }
   }
