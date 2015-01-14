@@ -3,8 +3,9 @@ package akkasmpp.actors
 import java.net.InetSocketAddress
 import akka.actor.{ActorSystem, Actor, Deploy, ActorRef, ActorLogging, Stash, Props}
 import scala.concurrent.duration._
-import akka.io.{TcpReadWriteAdapter, IO, Tcp, TcpPipelineHandler}
-import akka.io.TcpPipelineHandler.WithinActorContext
+import akka.io.{IO, Tcp}
+import akkasmpp.experimental.{TcpReadWriteAdapter, TcpPipelineHandler}
+import akkasmpp.experimental.TcpPipelineHandler.WithinActorContext
 import akkasmpp.protocol.{PduLogger, SmppTypes, BindRespLike, BindLike, EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppServerHandler.SmppPipeLine
