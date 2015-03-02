@@ -48,7 +48,7 @@ object PduGens {
     replaceIfPresent <- Gen.oneOf(true, false)
     dcs <- Gen.oneOf(DataCodingScheme.values.toSeq)
     smDefaultMsgId <- arbitrary[Byte]
-    msg <- arbitrary[String]
+    msg <- arbitrary[String].withFilter(_.getBytes.length < 160)
     msgBytes = msg.getBytes
 
   } yield SubmitSm(seqN, serviceType, sourceTon, sourceNpi, sourceAddr, destTon, destNpi, destAddr,
