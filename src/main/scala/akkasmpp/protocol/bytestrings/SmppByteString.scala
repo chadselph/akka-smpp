@@ -11,7 +11,7 @@ import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
 import akkasmpp.protocol.Priority.Priority
 import akkasmpp.protocol.ServiceType.ServiceType
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
-import akkasmpp.protocol.{COctetString, CommandId, CommandStatus, DataCodingScheme, EsmClass, MessageState, NumericPlanIndicator, OctetString, OpaqueTimeFormat, Priority, RegisteredDelivery, Tag, TimeFormat, Tlv, TypeOfNumber}
+import akkasmpp.protocol.{NullTime, COctetString, CommandId, CommandStatus, DataCodingScheme, EsmClass, MessageState, NumericPlanIndicator, OctetString, OpaqueTimeFormat, Priority, RegisteredDelivery, Tag, TimeFormat, Tlv, TypeOfNumber}
 
 /**
  * Helpers to parse and encode SMPP PDUs into akka ByteStrings
@@ -135,14 +135,15 @@ object SmppByteString {
     def getTime = {
       // XXX: parse time formats
       val time = bi.getCOctetString
-      OpaqueTimeFormat(time)
+      if (time.size == 0) NullTime
+      else  OpaqueTimeFormat(time)
     }
 
     def getRegisteredDelivery = RegisteredDelivery(bi.getByte)
 
     def getTlv = {
       val tag = Tag.getOrInvalid(bi.getShort)
-      val len = bi.getShort
+      val len = bi.getShort & 0xffff
       val value = bi.getOctetString(len)
       Tlv(tag, value)
     }
