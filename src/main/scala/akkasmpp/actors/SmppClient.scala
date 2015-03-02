@@ -48,7 +48,7 @@ object SmppClient {
   case class Did(number: String, `type`: TypeOfNumber = TypeOfNumber.International,
                  npi: NumericPlanIndicator = NumericPlanIndicator.E164)
   abstract class Command
-  case class Bind(systemId: String, password: String, systemType: Option[String] = None,
+  case class Bind(systemId: String, password: String, systemType: String = "",
                   mode: BindMode = Transceiver, addrTon: TypeOfNumber = TypeOfNumber.International,
                   addrNpi: NumericPlanIndicator = NumericPlanIndicator.E164) extends Command
 
@@ -158,7 +158,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       }
       implicit val encoding = java.nio.charset.Charset.forName("UTF-8")
       val cmd = bindFactory(sequenceNumberGen.next, new COctetString(systemId), new COctetString(password),
-        new COctetString(systemType.getOrElse("")), 0x34, addrTon, addrNpi)
+        new COctetString(systemType), 0x34, addrTon, addrNpi)
       log.info(s"Making bind request $cmd")
       connection ! wire.Command(cmd)
       unstashAll()
