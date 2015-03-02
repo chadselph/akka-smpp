@@ -1,13 +1,21 @@
 package akkasmpp.ssl
 
-import javax.net.ssl.{SSLEngine, TrustManagerFactory, KeyManagerFactory, SSLContext}
-import java.security.{SecureRandom, KeyStore}
 import java.net.InetSocketAddress
+import java.security.{KeyStore, SecureRandom}
+import javax.net.ssl.{SSLParameters, KeyManagerFactory, SSLContext, TrustManagerFactory}
+
+import com.typesafe.config.ConfigFactory
 
 /**
  * Module for cargo-cult code I don't really understand!
  */
 object SslUtil {
+
+  import collection.JavaConversions._
+  private val cf = ConfigFactory.load()
+  val PreferredProtocols = cf.getStringList("smpp.tls.enabled-protocols").toSet
+  val PreferredCiphersSuites = cf.getStringList("smpp.tls.enabled-cipher-suites").toSet
+  val VerifyHostname = cf.getBoolean("smpp.tls.verify-hostname")
 
   def sslContext(keyStore: KeyStore, password: String): SSLContext = {
     val keyManagerFactory = KeyManagerFactory.getInstance("SunX509")
@@ -22,9 +30,13 @@ object SslUtil {
   def sslEngine(sslContext: SSLContext, remote: InetSocketAddress, client: Boolean) = {
     val engine = sslContext.createSSLEngine(remote.getAddress.getHostAddress, remote.getPort)
     //engine.setEnabledCipherSuites(Array("TLS_RSA_WITH_AES_256_CBC_SHA"))
+    val params = new SSLParameters()
+    if (VerifyHostname) params.setEndpointIdentificationAlgorithm("HTTPS")
     engine.setUseClientMode(client)
-    engine.setEnabledCipherSuites(Array("TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_DHE_RSA_WITH_AES_128_CBC_SHA"))
-    engine.setEnabledProtocols(Array("SSLv3", "TLSv1"))
+    val enabledCipherSuites = (engine.getSupportedCipherSuites.toSet intersect PreferredCiphersSuites).toArray
+    val enabledProtocols = (engine.getSupportedProtocols.toSet intersect PreferredProtocols).toArray
+    engine.setEnabledProtocols(enabledProtocols)
+    engine.setEnabledCipherSuites(enabledCipherSuites)
     engine
   }
 }
