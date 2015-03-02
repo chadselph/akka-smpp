@@ -1,6 +1,6 @@
 package akkasmpp.actors
 
-import akka.actor.{OneForOneStrategy, ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
+import akka.actor.{ReceiveTimeout, OneForOneStrategy, ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
 import akkasmpp.protocol.{PduLogger, UnbindResp, Unbind, EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
 import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
@@ -10,7 +10,7 @@ import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
-import akkasmpp.actors.SmppClient.{BindFailed, UnbindReceived, PeerClosed, ConnectionFailed, ClientReceive, Bind}
+import akkasmpp.actors.SmppClient.{PeerTimedOut, BindFailed, UnbindReceived, PeerClosed, ConnectionFailed, ClientReceive, Bind}
 import scala.concurrent.duration.Duration
 import javax.net.ssl.{SSLException, SSLContext}
 import akkasmpp.ssl.SslUtil
@@ -24,6 +24,7 @@ object SmppClient {
 
   abstract class SmppClientException(msg: String) extends Exception(msg)
   class PeerClosed extends SmppClientException("Peer dropped the connection unexpectedly.")
+  class PeerTimedOut(time: Duration) extends SmppClientException(s"Peer went too long without responding to messages ($time), resetting connection.")
   class UnbindReceived extends SmppClientException("Peer sent Unbind request")
   class ConnectionFailed extends SmppClientException("Could not make TCP connection to the server.")
   class BindFailed(val errorCode: CommandStatus) extends SmppClientException("Bind failed with " + errorCode)
@@ -36,7 +37,7 @@ object SmppClient {
   }
 
   object Implicits {
-    implicit def stringAsDid(s: String) = Did(s)
+    implicit def stringAsDid(s: String): Did = Did(s)
   }
 
   abstract class BindMode
@@ -179,6 +180,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
           case f: FiniteDuration =>
             log.debug("Starting EnquireLink loop")
             context.system.scheduler.schedule(f/2, f, self, SmppClient.SendEnquireLink)(context.dispatcher)
+            context.setReceiveTimeout(f * 2)
           case _ =>
         }
         context.become(bound(wire, connection))
@@ -245,6 +247,8 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       connection ! wire.Command(GenericNack(CommandStatus.ESME_RCANCELFAIL, pdu.sequenceNumber))
 
     case cc: ConnectionClosed => throw new PeerClosed()
+
+    case ReceiveTimeout => throw new PeerTimedOut(config.enquireLinkTimer * 2)
 
   }
 }
