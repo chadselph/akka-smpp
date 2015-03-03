@@ -1,11 +1,11 @@
 package akkasmpp.protocol.bytestrings
 
 import akka.util.ByteIterator
-import akkasmpp.protocol.{COctetString, SubmitMulti, QuerySm, ReplaceSm, SubmitSm, DeliverSm, DataSm, BindTransmitter, BindTransceiver, CancelSm, CancelSmResp, BindTransceiverResp, BindTransmitterResp, BindReceiverResp, DataSmResp, DeliverSmResp, EnquireLink, EnquireLinkResp, GenericNack, Outbind, QuerySmResp, ReplaceSmResp, SmppTypes, Tlv, SubmitMultiResp, SubmitSmResp, Unbind, UnbindResp, BindReceiver, AlertNotification, CommandId, Pdu}
-import akkasmpp.protocol.bytestrings.SmppByteString.Iterator
-import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
-import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
 import akkasmpp.protocol.CommandStatus.CommandStatus
+import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
+import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
+import akkasmpp.protocol.bytestrings.SmppByteString.Iterator
+import akkasmpp.protocol.{AlertNotification, BindReceiver, BindReceiverResp, BindTransceiver, BindTransceiverResp, BindTransmitter, BindTransmitterResp, COctetString, CancelSm, CancelSmResp, CommandId, DataSm, DataSmResp, DeliverSm, DeliverSmResp, EnquireLink, EnquireLinkResp, GenericNack, Outbind, Pdu, QuerySm, QuerySmResp, ReplaceSm, ReplaceSmResp, SubmitMulti, SubmitMultiResp, SubmitSm, SubmitSmResp, Unbind, UnbindResp}
 
 /**
  * Parse PDU from bytestrings
@@ -26,17 +26,17 @@ object ReadPdu {
           bi.getTypeOfNumber, bi.getNumericPlanIndicator, bi.getCOctetString, if (bi.isEmpty) None else Some(bi.getTlv))
       case CommandId.bind_receiver =>
         BindReceiver(sequenceNumber, bi.getCOctetString, bi.getCOctetString, bi.getCOctetString, bi.getByte,
-          bi.getTypeOfNumber, bi.getNumericPlanIndicator)
+          bi.getTypeOfNumber, bi.getNumericPlanIndicator, bi.getCOctetString)
       case CommandId.bind_receiver_resp =>
         BindReceiverResp(status, sequenceNumber, bi.getCOctetStringMaybe, bi.getTlvs.headOption)
       case CommandId.bind_transceiver =>
         BindTransceiver(sequenceNumber, bi.getCOctetString, bi.getCOctetString, bi.getCOctetString, bi.getByte,
-          bi.getTypeOfNumber, bi.getNumericPlanIndicator)
+          bi.getTypeOfNumber, bi.getNumericPlanIndicator, bi.getCOctetString)
       case CommandId.bind_transceiver_resp =>
         BindTransceiverResp(status, sequenceNumber, bi.getCOctetStringMaybe, bi.getTlvs.headOption)
       case CommandId.bind_transmitter =>
         BindTransmitter(sequenceNumber, bi.getCOctetString, bi.getCOctetString, bi.getCOctetString, bi.getByte,
-          bi.getTypeOfNumber, bi.getNumericPlanIndicator)
+          bi.getTypeOfNumber, bi.getNumericPlanIndicator, bi.getCOctetString)
       case CommandId.bind_transmitter_resp =>
         BindTransmitterResp(status, sequenceNumber, bi.getCOctetStringMaybe, bi.getTlvs.headOption)
       case CommandId.cancel_sm =>

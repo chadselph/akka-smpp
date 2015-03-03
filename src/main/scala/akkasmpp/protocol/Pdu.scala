@@ -51,6 +51,7 @@ trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter with 
   def interfaceVersion: Byte
   def addrTon: TypeOfNumber
   def addrNpi: NumericPlanIndicator
+  def addressRange: COctetString
 }
 
 trait BindRespLike extends Pdu with WritePdu.BindRespWriter with SmscResponse {
@@ -89,7 +90,8 @@ trait SmRespLike extends Pdu with WritePdu.SmRespWriter {
  * Binds in transmit only mode
  */
 case class BindTransmitter(sequenceNumber: SmppTypes.Integer, systemId: COctetString, password: COctetString,
-                           systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
+                           systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber,
+                           addrNpi: NumericPlanIndicator, addressRange: COctetString)
   extends Pdu(CommandId.bind_transmitter) with BindLike
 
 case class BindTransmitterResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
@@ -100,7 +102,8 @@ case class BindTransmitterResp(commandStatus: CommandStatus, sequenceNumber: Smp
  * Binds in receive only mode
  */
 case class BindReceiver(sequenceNumber: SmppTypes.Integer, systemId: COctetString, password: COctetString,
-                        systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
+                        systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber,
+                        addrNpi: NumericPlanIndicator, addressRange: COctetString)
   extends Pdu(CommandId.bind_receiver) with BindLike
 
 case class BindReceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,
@@ -111,7 +114,8 @@ case class BindReceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTy
  * Binds in transmit and receiver mode
  */
 case class BindTransceiver(sequenceNumber: SmppTypes.Integer, systemId: COctetString, password: COctetString,
-                        systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber, addrNpi: NumericPlanIndicator)
+                        systemType: COctetString, interfaceVersion: Byte, addrTon: TypeOfNumber,
+                        addrNpi: NumericPlanIndicator, addressRange: COctetString)
   extends Pdu(CommandId.bind_transceiver) with BindLike
 
 case class BindTransceiverResp(commandStatus: CommandStatus, sequenceNumber: SmppTypes.Integer,

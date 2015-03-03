@@ -152,13 +152,13 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
   def bind(wire: SmppPipeLine, connection: ActorRef): Actor.Receive = {
     case SmppClient.Bind(systemId, password, systemType, mode, addrTon, addrNpi) =>
       val bindFactory = mode match {
-        case SmppClient.Transceiver => BindTransceiver(_, _, _, _, _, _, _)
-        case SmppClient.Receiver => BindReceiver(_, _, _, _, _, _, _)
-        case SmppClient.Transmitter => BindTransmitter(_, _, _, _, _, _, _)
+        case SmppClient.Transceiver => BindTransceiver(_, _, _, _, _, _, _, _)
+        case SmppClient.Receiver => BindReceiver(_, _, _, _, _, _, _, _)
+        case SmppClient.Transmitter => BindTransmitter(_, _, _, _, _, _, _, _)
       }
       implicit val encoding = java.nio.charset.Charset.forName("UTF-8")
       val cmd = bindFactory(sequenceNumberGen.next, new COctetString(systemId), new COctetString(password),
-        new COctetString(systemType), 0x34, addrTon, addrNpi)
+        new COctetString(systemType), 0x34, addrTon, addrNpi, COctetString.empty)
       log.info(s"Making bind request $cmd")
       connection ! wire.Command(cmd)
       unstashAll()
