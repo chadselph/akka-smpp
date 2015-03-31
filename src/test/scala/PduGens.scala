@@ -9,9 +9,7 @@ import org.scalacheck.Gen
  */
 object PduGens {
 
-  private def strGenToCOctetGen(g: Gen[String]) = {
-    g.map(new COctetString(_)(java.nio.charset.Charset.forName("ASCII")))
-  }
+  private def strGenToCOctetGen(g: Gen[String]) = g.map(COctetString.utf8)
 
 
   val serviceTypeGen = for {

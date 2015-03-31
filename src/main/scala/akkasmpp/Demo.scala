@@ -33,7 +33,7 @@ object Demo extends App {
         case wire.Event(ss: SubmitSm) =>
           log.info(s"SubmitSm with TLVs of ${ss.tlvs}")
           sender ! wire.Command(SubmitSmResp(
-            CommandStatus.ESME_ROK, ss.sequenceNumber, Some(new COctetString("abcde"))))
+            CommandStatus.ESME_ROK, ss.sequenceNumber, Some(COctetString.ascii("abcde"))))
       }
     }
   }
@@ -67,7 +67,7 @@ object Demo extends App {
     case d: SmscRequest => GenericNack(CommandStatus.ESME_RINVCMDID, d.sequenceNumber)
   }, "client")
 
-  implicit def str2CoctetString(s: String): COctetString = new COctetString(s)(java.nio.charset.Charset.forName("ASCII"))
+  implicit def str2CoctetString(s: String): COctetString = COctetString.utf8(s)
 
   c ? Bind("any", "any") onComplete { x =>
     val f = c ? SendRawPdu(SubmitSm(_, "tyntec", TypeOfNumber.International, NumericPlanIndicator.E164, "15094302095", TypeOfNumber.International,

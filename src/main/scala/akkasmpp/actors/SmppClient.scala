@@ -157,8 +157,8 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
         case SmppClient.Transmitter => BindTransmitter(_, _, _, _, _, _, _, _)
       }
       implicit val encoding = java.nio.charset.Charset.forName("UTF-8")
-      val cmd = bindFactory(sequenceNumberGen.next, new COctetString(systemId), new COctetString(password),
-        new COctetString(systemType), 0x34, addrTon, addrNpi, COctetString.empty)
+      val cmd = bindFactory(sequenceNumberGen.next, COctetString.ascii(systemId), COctetString.ascii(password),
+        COctetString.ascii(systemType), 0x34, addrTon, addrNpi, COctetString.empty)
       log.info(s"Making bind request $cmd")
       connection ! wire.Command(cmd)
       unstashAll()
@@ -199,8 +199,8 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       val body = msg.getBytes("ASCII")
       val seqNum = sequenceNumberGen.next
       implicit val encoding = java.nio.charset.Charset.forName("UTF-8")
-      val cmd = SubmitSm(seqNum, ServiceType.Default, from.`type`, from.npi, new COctetString(from.number),
-                         to.`type`, to.npi, new COctetString(to.number), EsmClass(EsmClass.MessagingMode.Default, EsmClass.MessageType.NormalMessage),
+      val cmd = SubmitSm(seqNum, ServiceType.Default, from.`type`, from.npi, COctetString.ascii(from.number),
+                         to.`type`, to.npi, COctetString.ascii(to.number), EsmClass(EsmClass.MessagingMode.Default, EsmClass.MessageType.NormalMessage),
                          0x34, Priority.Level0, NullTime, NullTime, RegisteredDelivery(), false, DataCodingScheme.SmscDefaultAlphabet,
                          0x0, body.length.toByte, new OctetString(body), Nil)
       log.info(s"Sending message $cmd")

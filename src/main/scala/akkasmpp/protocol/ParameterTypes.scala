@@ -2,10 +2,12 @@
 
 package akkasmpp.protocol
 
-import akkasmpp.protocol.RegisteredDelivery.SmscDelivery.SmscDelivery
-import akkasmpp.protocol.RegisteredDelivery.SmeAcknowledgement.SmeAcknowledgement
+import java.util
+import java.util.NoSuchElementException
+
 import akkasmpp.protocol.RegisteredDelivery.IntermediateNotification.IntermediateNotification
-import java.util.{NoSuchElementException, Arrays}
+import akkasmpp.protocol.RegisteredDelivery.SmeAcknowledgement.SmeAcknowledgement
+import akkasmpp.protocol.RegisteredDelivery.SmscDelivery.SmscDelivery
 
 object SmppTypes {
   type Integer = Int // An unsigned value with the defined number of octets.
@@ -39,20 +41,20 @@ object COctetString {
     new COctetString(bytes.map(_.toByte).toArray)
   }
   def ascii(s: String) = new COctetString(s.getBytes("ASCII"))
+  def utf8(s: String) = new COctetString(s.getBytes("UTF-8"))
 }
 
-class COctetString(val data: Array[Byte]) {
+class COctetString(private[akkasmpp] val data: Array[Byte]) {
 
-  def this(s: String)(implicit charEncoding: java.nio.charset.Charset) = this(s.getBytes(charEncoding))
-
+  // Equals is only needed for tests. If we had another solution for this,
+  // then COctetString and OctetString could by value classes
   override def equals(other: Any) = other match {
-      case o: COctetString => Arrays.equals(data, o.data)
-      case _ => false
-    }
-
-  def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
+    case o: COctetString => util.Arrays.equals(data, o.data)
+    case _ => false
+  }
 
   def size = data.size
+  def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
 
   def asString(implicit charEncoding: java.nio.charset.Charset) = {
     new String(data)
@@ -72,17 +74,22 @@ object OctetString {
  * String of octets with no null terminator
  * @param data
  */
-class OctetString(val data: Array[Byte]) {
+class OctetString(private[akkasmpp] val data: Array[Byte]) {
 
-      def this(b: Byte) = this(Array(b))
-      def size = data.size
-      def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
-      override def equals(other: Any) = other match {
-        case o: OctetString => Arrays.equals(data, o.data)
-        case _ => false
-      }
-      override def toString = {
-        data.map("%02X".format(_)).mkString("<OctetString: ", "", ">")
+  def size = data.size
+  def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
+
+  override def equals(other: Any) = other match {
+    case o: OctetString => util.Arrays.equals(data, o.data)
+    case _ => false
+  }
+
+  def asString(implicit charEncoding: java.nio.charset.Charset) = {
+    new String(data)
+  }
+
+  override def toString = {
+    data.map("%02X".format(_)).mkString("<OctetString: ", "", ">")
   }
 }
 
@@ -257,7 +264,7 @@ object CommandStatus extends FlexibleEnumeration {
 
 object ServiceType {
   type ServiceType = COctetString
-  def value(s: String) = new COctetString(s)(java.nio.charset.Charset.forName("ASCII"))
+  def value(s: String) = COctetString.ascii(s)
 
   val Default = value("")
   val CellularMessaging = value("CMT")

@@ -1,7 +1,5 @@
 package akkasmpp.protocol.bytestrings
 
-import java.nio.charset.Charset
-
 import akka.util.{ByteIterator, ByteStringBuilder}
 import akkasmpp.protocol.CommandId.CommandId
 import akkasmpp.protocol.CommandStatus.CommandStatus
@@ -11,7 +9,7 @@ import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
 import akkasmpp.protocol.Priority.Priority
 import akkasmpp.protocol.ServiceType.ServiceType
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
-import akkasmpp.protocol.{NullTime, COctetString, CommandId, CommandStatus, DataCodingScheme, EsmClass, MessageState, NumericPlanIndicator, OctetString, OpaqueTimeFormat, Priority, RegisteredDelivery, Tag, TimeFormat, Tlv, TypeOfNumber}
+import akkasmpp.protocol.{COctetString, CommandId, CommandStatus, DataCodingScheme, EsmClass, MessageState, NullTime, NumericPlanIndicator, OctetString, OpaqueTimeFormat, Priority, RegisteredDelivery, Tag, TimeFormat, Tlv, TypeOfNumber}
 
 /**
  * Helpers to parse and encode SMPP PDUs into akka ByteStrings
@@ -26,38 +24,19 @@ object SmppByteString {
 
     /**
      * Puts the string into the buffer followed by a NULL byte
-     * @param s String to send
-     * @param charset Encoding to use
+     * @param c COctetString to send
      */
 
-    def putCOctetString(s: String)(implicit charset: Charset): bsb.type = putCOctetString(s.getBytes(charset))
-
     def putCOctetString(c: COctetString) = {
-      // XXX: try to do this with more copying
-      val ba = new Array[Byte](c.size)
-      c.copyTo(ba)
-      bsb.putBytes(ba)
-      bsb.putByte(0)
-    }
-
-    def putCOctetString(b: Array[Byte]): bsb.type = {
-      putOctetString(b)
+      bsb.putBytes(c.data)
       bsb.putByte(0)
     }
 
     /**
      * Puts bytes of a string into the buffer without a NULL byte
-     * @param s String to send
-     * @param charset Encoding to use
      * @return
      */
-    def putOctetString(s: String)(implicit charset: Charset): bsb.type = putOctetString(s.getBytes(charset))
-    def putOctetString(b: Array[Byte]): bsb.type = bsb.putBytes(b)
-    def putOctetString(b: OctetString) = {
-      val bytes = new Array[Byte](b.size)
-      b.copyTo(bytes)
-      bsb.putBytes(bytes)
-    }
+    def putOctetString(b: OctetString) = bsb.putBytes(b.data)
 
     private def putEnumByte(e: Enumeration#Value) = bsb.putByte(e.id.toByte)
     private def putEnumInt(e: Enumeration#Value) = bsb.putInt(e.id)
@@ -71,7 +50,7 @@ object SmppByteString {
     def putDataCodingScheme = putEnumByte(_: DataCodingScheme)
     def putMessageState = putEnumByte (_: MessageState)
     // more complicated
-    def putServiceType(st: ServiceType) = bsb.putCOctetString(st.toString)(ascii)
+    def putServiceType(st: ServiceType) = bsb.putCOctetString(st)
     def putEsmClass(esm: EsmClass) = {
       val bits = esm.features.toBitMask(0) | esm.messageType.id | esm.messagingMode.id
       bsb.putByte(bits.toByte)

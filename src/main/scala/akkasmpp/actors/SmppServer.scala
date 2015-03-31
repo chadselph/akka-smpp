@@ -85,8 +85,8 @@ abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRe
   private def doBind(bindRecv: BindLike, respFactory: BindResponse) = {
     log.info(s"got a bind like message $bindRecv")
     respFactory(CommandStatus.ESME_ROK,
-      bindRecv.sequenceNumber, Some(new COctetString(serverSystemId)),
-      Some(Tlv(Tag.SC_interface_version, new OctetString(0x34: Byte))))
+      bindRecv.sequenceNumber, Some(COctetString.ascii(serverSystemId)),
+      Some(Tlv(Tag.SC_interface_version, OctetString(0x34: Byte))))
   }
 
   def binding: Actor.Receive = {
