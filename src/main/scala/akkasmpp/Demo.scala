@@ -1,7 +1,7 @@
 package akkasmpp
 import java.net.InetSocketAddress
 
-import akka.actor.{Actor, ActorSystem, Props}
+import akka.actor.ActorSystem
 import akka.io.{IO, Tcp}
 import akka.pattern.ask
 import akka.util.Timeout
@@ -76,13 +76,8 @@ object Demo extends App {
 
     f.onComplete {
       case Success(SubmitSmResp(commandStatus, _, _)) => println(s"command status was $commandStatus")
+      case other => println(s"Unexpected response: $other")
     }
   }
-
-  actorSystem.actorOf(Props(new Actor() {
-    override def receive: Actor.Receive = ???
-  }))
-
-
 
 }

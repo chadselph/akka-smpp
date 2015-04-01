@@ -202,7 +202,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       val cmd = SubmitSm(seqNum, ServiceType.Default, from.`type`, from.npi, COctetString.ascii(from.number),
                          to.`type`, to.npi, COctetString.ascii(to.number), EsmClass(EsmClass.MessagingMode.Default, EsmClass.MessageType.NormalMessage),
                          0x34, Priority.Level0, NullTime, NullTime, RegisteredDelivery(), false, DataCodingScheme.SmscDefaultAlphabet,
-                         0x0, body.length.toByte, new OctetString(body), Nil)
+                         0x0, body.length.toByte, OctetString.fromBytes(body), Nil)
       log.info(s"Sending message $cmd")
       connection ! wire.Command(cmd)
       window = window.updated(seqNum, context.actorOf(SubmitSmRespWatcher.props(Set(seqNum), sender),

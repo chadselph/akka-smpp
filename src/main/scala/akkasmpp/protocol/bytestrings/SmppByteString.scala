@@ -1,6 +1,6 @@
 package akkasmpp.protocol.bytestrings
 
-import akka.util.{ByteIterator, ByteStringBuilder}
+import akka.util.{ByteString, ByteIterator, ByteStringBuilder}
 import akkasmpp.protocol.CommandId.CommandId
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
@@ -28,7 +28,7 @@ object SmppByteString {
      */
 
     def putCOctetString(c: COctetString) = {
-      bsb.putBytes(c.data)
+      bsb.append(c.data)
       bsb.putByte(0)
     }
 
@@ -36,7 +36,7 @@ object SmppByteString {
      * Puts bytes of a string into the buffer without a NULL byte
      * @return
      */
-    def putOctetString(b: OctetString) = bsb.putBytes(b.data)
+    def putOctetString(b: OctetString) = bsb.append(b.data)
 
     private def putEnumByte(e: Enumeration#Value) = bsb.putByte(e.id.toByte)
     private def putEnumInt(e: Enumeration#Value) = bsb.putInt(e.id)
@@ -81,13 +81,13 @@ object SmppByteString {
         bsb.putByte(b)
         b = bi.getByte
       }
-      new COctetString(bsb.result().toArray)
+      new COctetString(bsb.result())
     }
     def getOctetString(n: Int): OctetString = {
       // TEMP bitwise HACK
       val ba = new Array[Byte](n & 0xff)
       bi.getBytes(ba)
-      new OctetString(ba)
+      new OctetString(ByteString.fromArray(ba))
     }
     def getCOctetStringMaybe: Option[COctetString] = {
       if (bi.isEmpty) None

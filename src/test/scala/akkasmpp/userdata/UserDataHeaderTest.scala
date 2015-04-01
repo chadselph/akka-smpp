@@ -10,6 +10,6 @@ class UserDataHeaderTest extends FunSuite with Matchers {
     udh.dataLength should be (5)
     val element = udh.elements(0)
     element.dataLength should be (3)
-    element.data should be (Array[Byte](9, 1, 2))
+    element.data should be (OctetString(9, 1, 2))
   }
 }

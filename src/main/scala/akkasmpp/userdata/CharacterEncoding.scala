@@ -2,8 +2,8 @@ package akkasmpp.userdata
 
 import java.nio.ByteBuffer
 
-import akkasmpp.protocol.DataCodingScheme
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
+import akkasmpp.protocol.{DataCodingScheme, OctetString}
 import akkasmpp.userdata.Charset.CodePoint
 import com.cloudhopper.commons.charset.{GSMCharset, ISO88591Charset, UCS2Charset}
 
@@ -63,6 +63,7 @@ object Charset {
 trait Charset {
 
   def encode(s: CharSequence): Array[Byte]
+  def decode(bs: OctetString): String = decode(bs.data.toArray)
   def decode(ba: Array[Byte]): String
   def charUnits(c: CodePoint): Int
   def bitsPerCodeUnit: Int

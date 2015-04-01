@@ -2,9 +2,9 @@
 
 package akkasmpp.protocol
 
-import java.util
 import java.util.NoSuchElementException
 
+import akka.util.ByteString
 import akkasmpp.protocol.RegisteredDelivery.IntermediateNotification.IntermediateNotification
 import akkasmpp.protocol.RegisteredDelivery.SmeAcknowledgement.SmeAcknowledgement
 import akkasmpp.protocol.RegisteredDelivery.SmscDelivery.SmscDelivery
@@ -36,56 +36,46 @@ object SmppTypes {
  * Immutable wrapper for  array of octets followed by a 0
  */
 object COctetString {
-  def empty = new COctetString(Array[Byte]())
+  def empty = new COctetString(ByteString.empty)
   def apply(bytes: Int*) = {
-    new COctetString(bytes.map(_.toByte).toArray)
+    new COctetString(ByteString.fromArray(bytes.map(_.toByte).toArray))
   }
-  def ascii(s: String) = new COctetString(s.getBytes("ASCII"))
-  def utf8(s: String) = new COctetString(s.getBytes("UTF-8"))
+  def ascii(s: String) = new COctetString(ByteString.fromString(s, "ASCII"))
+  def utf8(s: String) = new COctetString(ByteString.fromString(s, "UTF-8"))
 }
 
-class COctetString(private[akkasmpp] val data: Array[Byte]) {
-
-  // Equals is only needed for tests. If we had another solution for this,
-  // then COctetString and OctetString could by value classes
-  override def equals(other: Any) = other match {
-    case o: COctetString => util.Arrays.equals(data, o.data)
-    case _ => false
-  }
+class COctetString(val data: ByteString) extends AnyVal {
 
   def size = data.size
   def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
 
   def asString(implicit charEncoding: java.nio.charset.Charset) = {
-    new String(data)
+    data.decodeString(charEncoding.name)
   }
 
-  override def toString = new String(data, java.nio.charset.Charset.forName("ASCII"))
+  override def toString = data.decodeString("ASCII")
 }
 
 object OctetString {
-  def empty = new OctetString(Array[Byte]())
+  def empty = new OctetString(ByteString.empty)
   def apply(bytes: Int*) =  {
-    new OctetString(bytes.map(_.toByte).toArray)
+    new OctetString(ByteString.fromArray(bytes.map(_.toByte).toArray))
   }
+  def fromBytes(ba: Array[Byte]) = new OctetString(ByteString.fromArray(ba))
+  def unapplySeq(os: OctetString): Option[List[Byte]] = Some(os.data.toList)
 }
 
 /**
  * String of octets with no null terminator
  * @param data
  */
-class OctetString(private[akkasmpp] val data: Array[Byte]) {
+class OctetString(val data: ByteString) extends AnyVal {
 
   def size = data.size
   def copyTo(dest: Array[Byte]) = data.copyToArray(dest)
 
-  override def equals(other: Any) = other match {
-    case o: OctetString => util.Arrays.equals(data, o.data)
-    case _ => false
-  }
-
   def asString(implicit charEncoding: java.nio.charset.Charset) = {
-    new String(data)
+    data.decodeString(charEncoding.name)
   }
 
   override def toString = {

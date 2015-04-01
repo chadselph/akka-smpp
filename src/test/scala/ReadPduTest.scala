@@ -11,7 +11,7 @@ class ReadPduTest extends FlatSpec with Matchers with ByteStringHelpers with Gen
   "DeliverSm" should "get parsed correctly" in {
     val deliverSm = DeliverSm(123, ServiceType.Default, TypeOfNumber.National, NumericPlanIndicator.E164, COctetString.ascii("4413241434"),
       TypeOfNumber.National, NumericPlanIndicator.E164, COctetString.ascii("4413241435"), EsmClass(MessagingMode.Default, MessageType.NormalMessage),
-      0x34, Priority.Level0, NullTime, NullTime, RegisteredDelivery(), false, DataCodingScheme.Latin1, 0x0, 5, new OctetString("12345".getBytes), Nil)
+      0x34, Priority.Level0, NullTime, NullTime, RegisteredDelivery(), false, DataCodingScheme.Latin1, 0x0, 5, OctetString.fromBytes("12345".getBytes), Nil)
     val bs = deliverSm.toByteString
     val parsedDeliverSm: DeliverSm = ReadPdu.readPdu(bs.iterator).asInstanceOf[DeliverSm]
     inside (parsedDeliverSm) {

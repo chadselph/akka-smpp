@@ -1,6 +1,6 @@
 package akkasmpp.userdata
 
-import akkasmpp.protocol.{OctetString, COctetString}
+import akkasmpp.protocol.OctetString
 
 object InformationElementIdentifier extends Enumeration {
   type InformationElementIdentifier = Value
@@ -14,7 +14,7 @@ object InformationElementIdentifier extends Enumeration {
   val WirelessControlMessageProtocol = Value(0x9)
   val TextFormatting = Value(0xa)
   val PredefinedSound = Value(0xb)
-  val UserDefiendSound = Value(0xc)
+  val UserDefinedSound = Value(0xc)
   val PredefinedAnimation = Value(0xd)
   val LargeAnimation = Value(0xe)
   val SmallAnimation = Value(0xf)
@@ -30,7 +30,7 @@ object UserDataHeader {
         val t = InformationElementIdentifier(bytes.data(ieStart))
         val l = bytes.data(ieStart + 1)
         val v = bytes.data.slice(ieStart + 2, ieStart + 2 + l)
-        InformationElement(t, v) :: rec(ieStart + 3 + l)
+        InformationElement(t, new OctetString(v)) :: rec(ieStart + 3 + l)
       }
     }
     UserDataHeader(rec(1))
@@ -41,6 +41,6 @@ case class UserDataHeader(elements: Seq[InformationElement]) {
   val dataLength: Byte = (elements.map(_.dataLength + 2).sum & 255).toByte
 }
 
-case class InformationElement(identifier: InformationElementIdentifier.InformationElementIdentifier, data: Array[Byte]) {
-  val dataLength: Byte = (data.length & 255).toByte
+case class InformationElement(identifier: InformationElementIdentifier.InformationElementIdentifier, data: OctetString) {
+  val dataLength: Byte = (data.size & 255).toByte
 }

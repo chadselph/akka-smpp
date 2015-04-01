@@ -1,6 +1,6 @@
 import akkasmpp.protocol.EsmClass.{Features, MessageType, MessagingMode}
 import akkasmpp.protocol.RegisteredDelivery.{IntermediateNotification, SmeAcknowledgement, SmscDelivery}
-import akkasmpp.protocol.{COctetString, DataCodingScheme, EsmClass, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, ServiceType, SubmitSm, TypeOfNumber}
+import akkasmpp.protocol.{DeliverSmResp, CommandStatus, SubmitSmResp, DeliverSm, COctetString, DataCodingScheme, EsmClass, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, ServiceType, SubmitSm, TypeOfNumber}
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
 
@@ -34,6 +34,8 @@ object PduGens {
     intermed <- Gen.oneOf(IntermediateNotification.values.toSeq)
   } yield RegisteredDelivery.apply(smsc, sme, intermed)
 
+  val commandStatusGen = Gen.oneOf(CommandStatus.ESME_ROK, CommandStatus.ESME_RINVDLNAME, CommandStatus.ESME_RBINDFAIL)
+
   val submitSmGen = for {
     seqN <- arbitrary[Int]
     serviceType <- serviceTypeGen
@@ -51,8 +53,42 @@ object PduGens {
 
   } yield SubmitSm(seqN, serviceType, sourceTon, sourceNpi, sourceAddr, destTon, destNpi, destAddr,
     esmClass, protocol, priority, NullTime, NullTime, registeredDel, replaceIfPresent, dcs, smDefaultMsgId,
-    msgBytes.length.toByte, new OctetString(msgBytes), Nil)
+    msgBytes.length.toByte, OctetString.fromBytes(msgBytes), Nil)
 
-  val pduGen = submitSmGen
+  val deliverSmGen = for {
+    seqN <- arbitrary[Int]
+    serviceType <- serviceTypeGen
+    (sourceTon, sourceNpi, sourceAddr) <- numberGen
+    (destTon, destNpi, destAddr) <- numberGen
+    esmClass <- esmClassGen
+    protocol <- arbitrary[Byte]
+    priority <- Gen.oneOf(Priority.values.toSeq)
+    registeredDel <- registeredDeliveryGen
+    replaceIfPresent <- Gen.oneOf(true, false)
+    dcs <- Gen.oneOf(DataCodingScheme.values.toSeq)
+    smDefaultMsgId <- arbitrary[Byte]
+    msg <- arbitrary[String].withFilter(_.getBytes.length < 160)
+    msgBytes = msg.getBytes
+  } yield DeliverSm(seqN, serviceType, sourceTon, sourceNpi, sourceAddr, destTon, destNpi, destAddr,
+    esmClass, protocol, priority, NullTime, NullTime, registeredDel, replaceIfPresent, dcs, smDefaultMsgId,
+    msgBytes.length.toByte, OctetString.fromBytes(msgBytes), Nil)
+
+  val submitSmRespGen = for {
+    commandStatus <- commandStatusGen
+    seqN <- arbitrary[Int]
+    msgId <- arbitrary[String].withFilter(_.getBytes.length < 255)
+    msgIdO = if (commandStatus != CommandStatus.ESME_ROK) None else Some(COctetString.utf8(msgId))
+
+  } yield SubmitSmResp(commandStatus, seqN, msgIdO)
+
+  val deliverSmRespGen = for {
+    commandStatus <- commandStatusGen
+    seqN <- arbitrary[Int]
+    msgId <- arbitrary[String].withFilter(_.getBytes.length < 255)
+    msgIdO = if (commandStatus != CommandStatus.ESME_ROK) None else Some(COctetString.utf8(msgId))
+
+  } yield DeliverSmResp(commandStatus, seqN, msgIdO)
+
+  val pduGen = Gen.oneOf(submitSmGen, deliverSmGen, submitSmRespGen, deliverSmRespGen)
 
 }

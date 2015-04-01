@@ -1,5 +1,6 @@
 package akkasmpp.userdata
 
+import akka.util.ByteStringBuilder
 import akkasmpp.protocol.OctetString
 
 /**
@@ -7,34 +8,32 @@ import akkasmpp.protocol.OctetString
  */
 object UserData {
 
-  def headerAndPayload(userData: OctetString, udhi: Boolean): (Option[UserDataHeader], Array[Byte]) = {
+  def fromOctetString(userData: OctetString, udhi: Boolean): UserData = {
     if (udhi) {
       val header = UserDataHeader.fromShortMessage(userData)
       val headerLength = header.dataLength + 1 // +1 for the header length field itself
-      (Some(header), userData.data drop headerLength)
+      UserData(Some(header), new OctetString(userData.data drop headerLength))
     } else {
-      (None, userData.data)
+      UserData(None, new OctetString(userData.data))
     }
   }
 }
 
-case class UserData(header: Option[UserDataHeader], data: Array[Byte]) {
+case class UserData(header: Option[UserDataHeader], payload: OctetString) {
   def toOctetString: OctetString = {
-    val d = header match {
-      case None => data
+    header match {
+      case None => payload
       case Some(h) =>
-        val dest = new Array[Byte](h.dataLength + 1 + data.length)
-        dest(0) = (h.dataLength & 255).toByte
-        var i = 1
+        val dest = new ByteStringBuilder
+        dest.sizeHint(h.dataLength & 255 + 1 + payload.size)
+        dest.putByte(h.dataLength)
         h.elements.foreach { elem =>
-          dest(i) = (elem.identifier.id & 255).toByte
-          dest(i+1) = elem.dataLength
-          Array.copy(elem.data, 0, dest, i + 2, elem.dataLength)
-          i += elem.dataLength + 2
+          dest.putByte(elem.identifier.id.toByte)
+          dest.putByte(elem.dataLength)
+          dest.append(elem.data.data)
         }
-        Array.copy(data, 0, dest, i, data.length)
-        dest
+        dest.append(payload.data)
+        new OctetString(dest.result())
     }
-    new OctetString(d)
   }
 }
