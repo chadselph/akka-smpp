@@ -7,13 +7,11 @@ serializing them works.
 
 
 ### Todo
-- Tests
-- EnquireLink timer
-- Reading incoming PDUs
-- Several parameter types need write implementations
-- Solve commandLength problem
-- Server example
 - Parse valid TLVs
+- Framework for validating Bind / BindResp in server
+- Switch out Enumeration for something better with AnyVal
+- More PDU Builders
+- Rewrite TCP layer in new akka-stream
 
 ## Example Usage
 See Demo.scala for an example usage of an SMPP Client 
@@ -32,6 +30,23 @@ easily understand all the code without learning many magic Scala features.
 
 That being said, it is Scala idiomatic in terms of preferring immutable data, avoiding `null`, and
 providing Async APIs.
+
+## PDU Builders
+
+PDUs like SubmitSm and DeliverSm have a lot of parameters, and very few that actually matter. I didn't like
+the idea of having the protocol case classes be opinionated enough to have "default" values, and this quickly
+became a pain point of using the API. Instead, reasonable defaults now live in the `akkasmpp.protocol.PduBuilder`.
+
+```scala
+   import akkasmpp.protocol.PduBuilder
+   import akkasmpp.protocol.ParameterTypes.{TypeOfNumber, COctetString, OctetString}
+
+   val source: COctetString = COctetString
+   val dest: COctetString =
+   val msg: OctetString = OctetString(99, 104, 0, 100)
+   val builder = new PduBuilder(defaultTypeOfNumber = TypeOfNumber.International) // override any defaults you want in here with by-name parameters
+   builder.submitSm(sourceAddr = source, destinationAddr = dest, shortMessage = msg) // also lets you override anything
+```
 
 # Similar Projects
 There already exist several SMPP libraries in Java. To my knowledge, this is the only one in Scala.
