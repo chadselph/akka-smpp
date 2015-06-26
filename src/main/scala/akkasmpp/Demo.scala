@@ -1,29 +1,30 @@
 package akkasmpp
-import java.net.InetSocketAddress
-
 import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
 import akka.io.{IO, Tcp}
-import akka.pattern.ask
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.{Sink, Source, Flow}
+import akka.stream.stage.{Context, StageState, StatefulStage, SyncDirective}
 import akka.util.Timeout
-import akkasmpp.actors.SmppClient.{Bind, SendRawPdu}
-import akkasmpp.actors.{SmppClient, SmppClientConfig, SmppPartials, SmppServer, SmppServerHandler}
-import akkasmpp.protocol.EsmClass.{MessageType, MessagingMode}
-import akkasmpp.protocol.{COctetString, CommandStatus, DataCodingScheme, EsmClass, GenericNack, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, SmscRequest, SubmitSm, SubmitSmResp, TypeOfNumber}
+import akkasmpp.extensions.Smpp
+import akkasmpp.protocol._
+import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest}
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.util.Success
 
 object Demo extends App {
 
   implicit val actorSystem = ActorSystem("demo")
+  implicit val materializer = ActorMaterializer()
   val manager = IO(Tcp)
 
   implicit val t: Timeout = 5.seconds
-  import scala.concurrent.ExecutionContext.Implicits.global
   /*
     Demo server
    */
 
+  /*
   SmppServer.run("localhost", 2775) { (wire, connection) =>
     new SmppServerHandler(wire, connection) with SmppPartials {
 
@@ -37,6 +38,62 @@ object Demo extends App {
       }
     }
   }
+  */
+
+  Http(actorSystem).bind("", port=1025).runForeach({ connection =>
+    connection.flow
+  })
+
+  val pduEcho = Flow[Pdu].map(identity)
+  val handler = Flow[Pdu].map(x => {
+    println("<-- " + x)
+    val resp = x match {
+      case BindTransceiver(seqN, _, _, _, _, _, _, _) =>
+        BindTransceiverResp(CommandStatus.ESME_ROK, seqN, None, None)
+      case BindTransmitter(seqN, _, _, _, _, _, _, _) =>
+        BindTransmitterResp(CommandStatus.ESME_ROK, seqN, None, None)
+      case BindReceiver(seqN, _, _, _, _, _, _, _) =>
+        BindReceiverResp(CommandStatus.ESME_ROK, seqN, None, None)
+      case EnquireLink(seqN) => EnquireLinkResp(seqN)
+      case submitSm: SubmitSm =>
+        SubmitSmResp(CommandStatus.ESME_ROK, submitSm.sequenceNumber, Some(COctetString.ascii("abcde-asdf-asdf")))
+      case _ => GenericNack(CommandStatus.ESME_RINVOPTPARAMVAL, x.sequenceNumber)
+    }
+    println("--> " + resp)
+    resp
+  })
+
+  class SmppStage(authenticator: BindAuthenticator) extends StatefulStage[Pdu, Pdu] {
+
+    override def initial: StageState[Pdu, Pdu] = new StageState[Pdu, Pdu] {
+      override def onPush(elem: Pdu, ctx: Context[Pdu]): SyncDirective = {
+        elem match {
+          case bl: BindLike =>
+            val bindResponse = authenticator.allowBind(BindRequest.fromBindLike(bl))
+            import scala.concurrent.duration._
+            val resp = Await.result(bindResponse, 2.seconds) // XXX: is StatefulStage threadsafe? I don't want to block.
+            emit(List(resp.asInstanceOf[Pdu]).iterator, ctx, bound)
+        }
+      }
+    }
+
+    def bound: StageState[Pdu, Pdu] = new StageState[Pdu, Pdu] {
+      override def onPush(elem: Pdu, ctx: Context[Pdu]): SyncDirective = {
+        ctx.push(elem)
+      }
+    }
+  }
+
+
+
+  val serverBindings = Smpp(actorSystem).listen(interface = "", port = 2775)
+  serverBindings.runForeach { connection =>
+    println(connection.remoteAddress)
+    connection.handle(handler)
+    val f = Source.single(EnquireLink(1337)).via(connection.flow).runWith(Sink.head)
+    f.onComplete { println }(actorSystem.dispatcher)
+  }
+
 
 
   /*
@@ -61,7 +118,6 @@ object Demo extends App {
       println(x)
     }
   }
-   */
 
   val c = SmppClient.connect(SmppClientConfig(new InetSocketAddress("ec2-184-73-153-156.compute-1.amazonaws.com", 2775)), {
     case d: SmscRequest => GenericNack(CommandStatus.ESME_RINVCMDID, d.sequenceNumber)
@@ -79,5 +135,6 @@ object Demo extends App {
       case other => println(s"Unexpected response: $other")
     }
   }
+   */
 
 }

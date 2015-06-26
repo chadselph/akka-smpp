@@ -44,7 +44,7 @@ sealed trait SmscRequest extends Pdu
 
 sealed trait SmscResponse extends Pdu
 
-trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter with EsmeRequest {
+sealed trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter with EsmeRequest {
   def systemId: COctetString
   def password: COctetString
   def systemType: COctetString
@@ -54,13 +54,13 @@ trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWriter with 
   def addressRange: COctetString
 }
 
-trait BindRespLike extends Pdu with WritePdu.BindRespWriter with SmscResponse {
+sealed trait BindRespLike extends Pdu with WritePdu.BindRespWriter with SmscResponse {
   def systemId: Option[COctetString]
   def scInterfaceVersion: Option[Tlv]
 }
 
 // deliver_sm / submit_sm. But not submit_multi or data_sm
-trait SmLike extends Pdu with WritePdu.SmWriter {
+sealed trait SmLike extends Pdu with WritePdu.SmWriter {
   def serviceType: ServiceType
   def sourceAddrTon: TypeOfNumber
   def sourceAddrNpi: NumericPlanIndicator
@@ -82,7 +82,7 @@ trait SmLike extends Pdu with WritePdu.SmWriter {
   def tlvs: List[Tlv]
 }
 
-trait SmRespLike extends Pdu with WritePdu.SmRespWriter {
+sealed trait SmRespLike extends Pdu with WritePdu.SmRespWriter {
   def messageId: Option[COctetString]
 }
 

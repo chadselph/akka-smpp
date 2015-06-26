@@ -2,9 +2,8 @@ package akkasmpp.actors
 
 import akka.actor.{ReceiveTimeout, OneForOneStrategy, ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
 import java.net.InetSocketAddress
-import akkasmpp.protocol.{PduLogger, UnbindResp, Unbind, EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu, SmppFramePipeline}
-import akka.io.{SslTlsSupport, TcpReadWriteAdapter, TcpPipelineHandler, Tcp, IO}
-import akka.io.TcpPipelineHandler.WithinActorContext
+import akka.io.{Tcp, IO}
+import akkasmpp.protocol.{PduLogger, UnbindResp, Unbind, EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu}
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
 import akkasmpp.protocol.DataCodingScheme.DataCodingScheme
@@ -13,7 +12,6 @@ import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.actors.SmppClient.{PeerTimedOut, BindFailed, UnbindReceived, PeerClosed, ConnectionFailed, ClientReceive, Bind}
 import scala.concurrent.duration.Duration
 import javax.net.ssl.{SSLException, SSLContext}
-import akkasmpp.ssl.SslUtil
 import akka.actor.SupervisorStrategy.Escalate
 
 /**
@@ -103,8 +101,6 @@ case class SmppClientConfig(bindTo: InetSocketAddress, enquireLinkTimer: Duratio
 class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: PduLogger = PduLogger.default)
   extends SmppActor with ActorLogging with Stash {
 
-  type SmppPipeLine = TcpPipelineHandler.Init[WithinActorContext, Pdu, Pdu]
-
   import akka.io.Tcp.{Connect, Connected, CommandFailed, Close, ConnectionClosed}
   import scala.concurrent.duration._
   import context.system
@@ -132,24 +128,13 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       /*
       Decide if to do a TLS handshake or not
        */
-      val stages = config.sslContext match {
-        case None => new SmppFramePipeline(pduLogger) >> new TcpReadWriteAdapter
-        case Some(sslContext) =>
-          new SmppFramePipeline(pduLogger) >> new TcpReadWriteAdapter >>
-            new SslTlsSupport(SslUtil.sslEngine(sslContext, remote, client = true))
-      }
 
-      val pipeline = TcpPipelineHandler.withLogger(log, stages)
-      val handler = context.actorOf(TcpPipelineHandler.props(pipeline, sender, self).withDeploy(Deploy.local), "handler")
-      context.watch(sender)
-      sender ! Tcp.Register(handler)
-      unstashAll()
+      context.watch(sender())
       config.autoBind.foreach { self.tell(_, context.parent) } // send bind command to yourself if it's configured for autobind
-      context.become(bind(pipeline, handler))
     case _ => stash()
   }
 
-  def bind(wire: SmppPipeLine, connection: ActorRef): Actor.Receive = {
+  def bind(connection: ActorRef): Actor.Receive = {
     case SmppClient.Bind(systemId, password, systemType, mode, addrTon, addrNpi) =>
       val bindFactory = mode match {
         case SmppClient.Transceiver => BindTransceiver(_, _, _, _, _, _, _, _)
@@ -160,17 +145,17 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       val cmd = bindFactory(sequenceNumberGen.next, COctetString.ascii(systemId), COctetString.ascii(password),
         COctetString.ascii(systemType), 0x34, addrTon, addrNpi, COctetString.empty)
       log.info(s"Making bind request $cmd")
-      connection ! wire.Command(cmd)
+      connection ! cmd
       unstashAll()
       // XXX: receive timeout?
-      context.become(binding(wire, connection, sender))
+      context.become(binding(connection, sender))
     case cc: ConnectionClosed => throw new PeerClosed()
     case _ => stash()
   }
 
-  def binding(wire: SmppPipeLine, connection: ActorRef, requester: ActorRef): Actor.Receive = {
+  def binding(connection: ActorRef, requester: ActorRef): Actor.Receive = {
     // Future improvement: Type tags to ensure the response is the same as the request?
-    case wire.Event(p: BindRespLike) =>
+    case p: BindRespLike =>
       requester ! p
       if (p.commandStatus == CommandStatus.ESME_ROK) {
         unstashAll()
@@ -183,7 +168,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
             context.setReceiveTimeout(f * 2)
           case _ =>
         }
-        context.become(bound(wire, connection))
+        context.become(bound(connection))
       } else {
         throw new BindFailed(p.commandStatus)
       }
@@ -193,7 +178,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
   }
 
   import SmppClient.{SendMessage, SendEnquireLink, SendRawPdu}
-  def bound(wire: SmppPipeLine, connection: ActorRef): Actor.Receive = {
+  def bound(connection: ActorRef): Actor.Receive = {
     case SendMessage(msg, to, from, encoding) =>
       // XXX: Support concat and non-ascii
       val body = msg.getBytes("ASCII")
@@ -204,47 +189,47 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
                          0x34, Priority.Level0, NullTime, NullTime, RegisteredDelivery(), false, DataCodingScheme.SmscDefaultAlphabet,
                          0x0, body.length.toByte, OctetString.fromBytes(body), Nil)
       log.info(s"Sending message $cmd")
-      connection ! wire.Command(cmd)
-      window = window.updated(seqNum, context.actorOf(SubmitSmRespWatcher.props(Set(seqNum), sender),
+      connection ! cmd
+      window = window.updated(seqNum, context.actorOf(SubmitSmRespWatcher.props(Set(seqNum), sender()),
         s"seqN-${cmd.sequenceNumber}"))
 
     case SendEnquireLink =>
       log.debug("sending enquire link!")
-      connection ! wire.Command(EnquireLink(sequenceNumberGen.next))
+      connection ! EnquireLink(sequenceNumberGen.next)
 
     case SendRawPdu(newPdu) =>
       val pdu = newPdu(sequenceNumberGen.next)
       log.debug(s"sending raw pdu $pdu")
-      connection ! wire.Command(pdu)
-      window = window.updated(pdu.sequenceNumber, sender)
+      connection ! pdu
+      window = window.updated(pdu.sequenceNumber, sender())
 
-    case wire.Event(pdu: SmscResponse) if window.get(pdu.sequenceNumber).isDefined =>
+    case pdu: SmscResponse if window.get(pdu.sequenceNumber).isDefined =>
       log.debug(s"Incoming SubmitSmResp $pdu")
       window(pdu.sequenceNumber) ! pdu
       window = window - pdu.sequenceNumber
-    case wire.Event(pdu: EnquireLinkResp) =>
+    case pdu: EnquireLinkResp =>
       log.debug(s"got enquire_link_resp")
       // XXX: update some internal timer?
-    case wire.Event(pdu: SmscResponse) =>
+    case pdu: SmscResponse =>
       log.warning(s"Response for unknown sequence number: $pdu")
-    case wire.Event(EnquireLink(seq)) =>
-      connection ! wire.Command(EnquireLinkResp(seq))
-    case wire.Event(msg: SmscRequest) if receiver.isDefinedAt(msg) =>
+    case EnquireLink(seq) =>
+      connection ! EnquireLinkResp(seq)
+    case msg: SmscRequest if receiver.isDefinedAt(msg) =>
       // XXX: also make this async for Futures
       val resp = receiver(msg)
       log.debug(s"Replying to $msg with $resp")
-      connection ! wire.Command(resp)
+      connection ! resp
 
-    case wire.Event(Unbind(seqN)) =>
+    case Unbind(seqN) =>
       // XXX: what will happen to "inflight" requests?
       log.info(s"Received Unbind, closing connection")
-      connection ! wire.Command(UnbindResp(CommandStatus.ESME_ROK, seqN))
+      connection ! UnbindResp(CommandStatus.ESME_ROK, seqN)
       manager ! Close
       throw new UnbindReceived()
 
-    case wire.Event(pdu: Pdu) =>
+    case pdu: Pdu =>
       log.warning(s"Received unsupported pdu: $pdu responding with GenericNack")
-      connection ! wire.Command(GenericNack(CommandStatus.ESME_RCANCELFAIL, pdu.sequenceNumber))
+      connection ! GenericNack(CommandStatus.ESME_RCANCELFAIL, pdu.sequenceNumber)
 
     case cc: ConnectionClosed => throw new PeerClosed()
 

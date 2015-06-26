@@ -1,16 +1,16 @@
 package akkasmpp.actors
 
 import java.net.InetSocketAddress
-import akka.actor.{ActorSystem, Actor, Deploy, ActorRef, ActorLogging, Stash, Props}
-import scala.concurrent.duration._
-import akka.io.{TcpReadWriteAdapter, IO, Tcp, TcpPipelineHandler}
-import akka.io.TcpPipelineHandler.WithinActorContext
-import akkasmpp.protocol.{PduLogger, SmppTypes, BindRespLike, BindLike, EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
-import akkasmpp.protocol.SmppTypes.SequenceNumber
-import akkasmpp.actors.SmppServerHandler.SmppPipeLine
 import java.nio.charset.Charset
+
+import akka.actor.{Actor, ActorLogging, ActorRef}
+import akka.io.{IO, Tcp}
 import akkasmpp.actors.SmppServer.SendRawPdu
 import akkasmpp.protocol.CommandStatus.CommandStatus
+import akkasmpp.protocol.SmppTypes.SequenceNumber
+import akkasmpp.protocol.{AtomicIntegerSequenceNumberGenerator, BindLike, BindReceiver, BindRespLike, BindTransceiver, BindTransceiverResp, BindTransmitter, COctetString, CommandStatus, EsmeResponse, OctetString, PduLogger, SmppTypes, SmscRequest, Tag, Tlv}
+
+import scala.concurrent.duration._
 
 case class SmppServerConfig(bindAddr: InetSocketAddress, enquireLinkTimeout: Duration = 60.seconds)
 
@@ -18,25 +18,12 @@ object SmppServer {
 
   case class SendRawPdu(p: (SequenceNumber) => SmscRequest)
 
-  def props(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler,
-            pduLogger: PduLogger = PduLogger.default) =
-    Props(classOf[SmppServer], config, handlerSpec, pduLogger)
-
-  def run(host: String, port: Int, enquireLinkTimeout: Duration = 60.seconds)
-         (actor: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler)
-         (implicit as: ActorSystem) = {
-    as.actorOf(SmppServer.props(
-      SmppServerConfig(new InetSocketAddress(host, port), enquireLinkTimeout), actor))
-
-  }
 }
 
-class SmppServer(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler,
-                 pduLogger: PduLogger = PduLogger.default)
-  extends Actor with ActorLogging with Stash {
+class SmppServer(config: SmppServerConfig,  pduLogger: PduLogger = PduLogger.default) extends Actor with ActorLogging {
 
-  import context.system
   import Tcp._
+  import context.system
 
   val manager = IO(Tcp)
 
@@ -54,24 +41,14 @@ class SmppServer(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppP
       /*
       New SMPP connection, need to start a handler.
        */
-      val connection = sender
+      val connection = sender()
       log.debug(s"connection is $connection")
-      val init = TcpPipelineHandler.withLogger(log, new SmppFramePipeline(pduLogger) >> new TcpReadWriteAdapter)
-      val handler = context.actorOf(Props(handlerSpec(init, connection)))
-      val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler).withDeploy(Deploy.local))
-      sender ! Register(pipeline)
+      sender ! Register(self)
   }
 
 }
 
-object SmppServerHandler {
-  type SmppPipeLine = TcpPipelineHandler.Init[WithinActorContext, Pdu, Pdu]
-
-  def props(wire: SmppPipeLine) = Props(classOf[SmppServerHandler], wire)
-}
-
-abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRef)
-  extends SmppActor with ActorLogging {
+abstract class SmppServerHandler(val connection: ActorRef) extends SmppActor with ActorLogging {
 
   implicit val cs = Charset.forName("UTF-8")
   val sequenceNumberGen = new AtomicIntegerSequenceNumberGenerator
@@ -90,14 +67,14 @@ abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRe
   }
 
   def binding: Actor.Receive = {
-    case wire.Event(bt: BindTransceiver) =>
-      sender ! wire.Command(doBind(bt, BindTransceiverResp.apply))
+    case bt: BindTransceiver =>
+      sender ! doBind(bt, BindTransceiverResp.apply)
       context.become(bound)
-    case wire.Event(br: BindReceiver) =>
-      sender ! wire.Command(doBind(br, BindTransceiverResp.apply))
+    case br: BindReceiver =>
+      sender ! doBind(br, BindTransceiverResp.apply)
       context.become(bound)
-    case wire.Event(bt: BindTransmitter) =>
-      sender ! wire.Command(doBind(bt, BindTransceiverResp.apply))
+    case bt: BindTransmitter =>
+      sender ! doBind(bt, BindTransceiverResp.apply)
       context.become(bound)
 
   }
@@ -109,10 +86,9 @@ abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRe
     case SendRawPdu(p) =>
       val pdu = p(sequenceNumberGen.next)
       log.info(s"Sending raw pdu $pdu to $connection")
-      // seems to be a design flaw in Pipelines...
-      connection ! Tcp.Write(pdu.toByteString)
-      window = window.updated(pdu.sequenceNumber, sender)
-    case wire.Event(r: EsmeResponse) if window.contains(r.sequenceNumber) =>
+      // XXX: send tcp?
+      window = window.updated(pdu.sequenceNumber, sender())
+    case r: EsmeResponse if window.contains(r.sequenceNumber) =>
       log.debug(s"Forwarding along $r")
       window(r.sequenceNumber) ! r
       window = window - r.sequenceNumber
