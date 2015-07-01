@@ -1,9 +1,13 @@
 import akkasmpp.protocol.bytestrings.ReadPdu
 import akkasmpp.protocol.EsmClass.{MessageType, MessagingMode}
 import akkasmpp.protocol.{CommandStatus, CommandId, BindTransceiverResp, Pdu, OctetString, COctetString, DataCodingScheme, RegisteredDelivery, NullTime, Priority, EsmClass, NumericPlanIndicator, TypeOfNumber, ServiceType, DeliverSm}
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Inside, Matchers, FlatSpec}
+import scala.language.reflectiveCalls
 
+@RunWith(classOf[JUnitRunner])
 class ReadPduTest extends FlatSpec with Matchers with ByteStringHelpers with GeneratorDrivenPropertyChecks with Inside {
 
   implicit val ce = java.nio.charset.Charset.forName("UTF-8")

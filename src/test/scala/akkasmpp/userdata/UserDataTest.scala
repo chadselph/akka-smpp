@@ -2,8 +2,11 @@ package akkasmpp.userdata
 
 import akkasmpp.protocol.OctetString
 import akkasmpp.userdata.{InformationElementIdentifier => IEI}
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.{FunSuite, Matchers}
 
+@RunWith(classOf[JUnitRunner])
 class UserDataTest extends FunSuite with Matchers {
 
   test("writing a user data with UDH to an octet string should work") {

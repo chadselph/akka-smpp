@@ -17,6 +17,7 @@ import scala.concurrent.duration.Duration
 import javax.net.ssl.{SSLException, SSLContext}
 import akkasmpp.ssl.SslUtil
 import akka.actor.SupervisorStrategy.Escalate
+import scala.language.implicitConversions
 
 /**
  * Basic ESME behaviors
