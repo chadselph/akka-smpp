@@ -1,12 +1,15 @@
 package akkasmpp
-import akka.actor.ActorSystem
+
+import java.net.InetSocketAddress
+
+import akka.actor.{ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.io.{IO, Tcp}
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Sink, Source, Flow}
+import akka.stream.scaladsl.Flow
 import akka.stream.stage.{Context, StageState, StatefulStage, SyncDirective}
 import akka.util.Timeout
-import akkasmpp.extensions.Smpp
+import akkasmpp.actors.{SmppServerConfig, SmppServer}
 import akkasmpp.protocol._
 import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest}
 
@@ -84,15 +87,17 @@ object Demo extends App {
     }
   }
 
+  /*
 
 
   val serverBindings = Smpp(actorSystem).listen(interface = "", port = 2775)
   serverBindings.runForeach { connection =>
-    println(connection.remoteAddress)
-    connection.handle(handler)
     val f = Source.single(EnquireLink(1337)).via(connection.flow).runWith(Sink.head)
     f.onComplete { println }(actorSystem.dispatcher)
   }
+  */
+
+  actorSystem.actorOf(Props(new SmppServer(SmppServerConfig(new InetSocketAddress("0.0.0.0", 2775)))))
 
 
 

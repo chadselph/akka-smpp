@@ -4,11 +4,13 @@ import java.net.InetSocketAddress
 import java.nio.charset.Charset
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
-import akka.io.{IO, Tcp}
+import akka.stream.{Materializer, OverflowStrategy}
+import akka.stream.scaladsl.{Sink, Source}
 import akkasmpp.actors.SmppServer.SendRawPdu
+import akkasmpp.extensions.Smpp
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
-import akkasmpp.protocol.{AtomicIntegerSequenceNumberGenerator, BindLike, BindReceiver, BindRespLike, BindTransceiver, BindTransceiverResp, BindTransmitter, COctetString, CommandStatus, EsmeResponse, OctetString, PduLogger, SmppTypes, SmscRequest, Tag, Tlv}
+import akkasmpp.protocol._
 
 import scala.concurrent.duration._
 
@@ -20,30 +22,24 @@ object SmppServer {
 
 }
 
-class SmppServer(config: SmppServerConfig,  pduLogger: PduLogger = PduLogger.default) extends Actor with ActorLogging {
-
-  import Tcp._
-  import context.system
-
-  val manager = IO(Tcp)
+class SmppServer(config: SmppServerConfig,  pduLogger: PduLogger = PduLogger.default)
+                (implicit mat: Materializer) extends Actor with ActorLogging {
 
   log.info(s"Starting new SMPP server listening on ${config.bindAddr}")
-  manager ! Bind(self, config.bindAddr)
+  val flow = Smpp(context.system).listen(config.bindAddr.getHostString, config.bindAddr.getPort,
+    idleTimeout = config.enquireLinkTimeout)
 
-  override def receive = {
-    case Bound(localAddress) =>
-      log.info(s"SMPP server bound to $localAddress")
-    case CommandFailed(b: Bind) =>
-      log.error(s"Failed to bind $b")
-      context stop self
-    case Connected(remote, local) =>
-      log.info(s"New connection from $remote")
-      /*
-      New SMPP connection, need to start a handler.
-       */
-      val connection = sender()
-      log.debug(s"connection is $connection")
-      sender ! Register(self)
+
+  flow.runForeach(incomingConnection => {
+    val pduSource = Source.actorRef[Pdu](8, OverflowStrategy.fail)
+    val pduSink = Sink.actorRef[Pdu](self, Unit)
+    val target = pduSource.via(incomingConnection.flow).to(pduSink).run()
+  })
+
+  def receive = {
+    case x: Any =>
+      println(x)
+      sender() ! EnquireLink(12)
   }
 
 }
