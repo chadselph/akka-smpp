@@ -17,7 +17,12 @@ case class BindRequest private(requestsTransmit: Boolean, requestsReceive: Boole
   def respond(commandStatus: CommandStatus,
                 systemType: Option[COctetString] = None,
                 scInterfaceVersion: Option[Tlv] = None) = {
-    replyContructor(commandStatus, original.sequenceNumber, systemType, scInterfaceVersion)
+    val pdu = replyContructor(commandStatus, original.sequenceNumber, systemType, scInterfaceVersion)
+    if (commandStatus == CommandStatus.ESME_ROK) {
+      BindResponseSuccess(pdu)
+    } else {
+      BindResponseError(pdu)
+    }
   }
 
   def respondOk(systemType: Option[COctetString] = None,
@@ -50,3 +55,7 @@ object BindRequest {
     }
   }
 }
+
+sealed trait BindResponse { val pdu: BindRespLike }
+case class BindResponseSuccess private[auth] (pdu: BindRespLike) extends BindResponse
+case class BindResponseError private[auth] (pdu: BindRespLike) extends BindResponse

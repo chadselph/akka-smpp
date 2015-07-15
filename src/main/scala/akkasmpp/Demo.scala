@@ -10,7 +10,9 @@ import akka.util.Timeout
 import akkasmpp.actors.SmppClient.SendEnquireLink
 import akkasmpp.actors.{SmppServer, SmppServerConfig, SmppServerHandler}
 import akkasmpp.protocol._
+import akkasmpp.protocol.auth.{BindRequest, BindAuthenticator}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object Demo extends App {
@@ -27,7 +29,16 @@ object Demo extends App {
 
   actorSystem.actorOf(SmppServer.props(SmppServerConfig(new InetSocketAddress("0.0.0.0", 2775)), new SmppServerHandler {
 
+
     context.system.scheduler.schedule(0.seconds, 10.seconds, self, SendEnquireLink)(context.dispatcher)
+
+    override val bindAuthenticator: BindAuthenticator = new BindAuthenticator {
+      override def allowBind(bindRequest: BindRequest) = {
+        Future.successful(
+          bindRequest.respondOk(Some(COctetString.utf8("akka-smpp-demo")))
+        )
+      }
+    }
 
     // XXX: split out into bound transmit vs bound receive
     override def bound(connection: ActorRef): Receive = {

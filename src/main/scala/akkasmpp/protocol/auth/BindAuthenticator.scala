@@ -1,7 +1,5 @@
 package akkasmpp.protocol.auth
 
-import akkasmpp.protocol.BindRespLike
-
 import scala.concurrent.Future
 
 /**
@@ -9,6 +7,6 @@ import scala.concurrent.Future
  */
 trait BindAuthenticator {
 
-  def allowBind(bindRequest: BindRequest): Future[BindRespLike]
+  def allowBind(bindRequest: BindRequest): Future[BindResponse]
 
 }
