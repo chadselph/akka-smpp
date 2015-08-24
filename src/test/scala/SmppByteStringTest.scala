@@ -1,9 +1,13 @@
 import akka.util.{ByteIterator, ByteStringBuilder, ByteString}
 import akkasmpp.protocol.RegisteredDelivery.IntermediateNotification
 import akkasmpp.protocol.{BindTransceiverResp, CommandStatus, CommandId, Pdu, RegisteredDelivery, EsmClass}
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.{Matchers, FlatSpec}
 import akkasmpp.protocol.bytestrings.SmppByteString.{Iterator, Builder}
+import scala.language.reflectiveCalls
 
+@RunWith(classOf[JUnitRunner])
 class SmppByteStringTest extends FlatSpec with Matchers with ByteStringHelpers {
 
   import EsmClass.{MessagingMode, MessageType, Features}

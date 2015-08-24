@@ -1,7 +1,8 @@
 package akkasmpp.actors
 
-import akka.actor.{ReceiveTimeout, OneForOneStrategy, ActorRefFactory, Props, Stash, ActorRef, Deploy, Actor, ActorLogging}
+
 import java.net.InetSocketAddress
+import akka.actor._
 import akka.io.{Tcp, IO}
 import akkasmpp.protocol.{PduLogger, UnbindResp, Unbind, EsmeResponse, SmscRequest, SmscResponse, EsmeRequest, OctetString, COctetString, GenericNack, CommandStatus, EnquireLinkResp, BindRespLike, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Priority, DataCodingScheme, RegisteredDelivery, NullTime, EsmClass, ServiceType, SubmitSm, EnquireLink, NumericPlanIndicator, TypeOfNumber, BindTransmitter, Pdu}
 import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
@@ -13,6 +14,7 @@ import akkasmpp.actors.SmppClient.{PeerTimedOut, BindFailed, UnbindReceived, Pee
 import scala.concurrent.duration.Duration
 import javax.net.ssl.{SSLException, SSLContext}
 import akka.actor.SupervisorStrategy.Escalate
+import scala.language.implicitConversions
 
 /**
  * Basic ESME behaviors

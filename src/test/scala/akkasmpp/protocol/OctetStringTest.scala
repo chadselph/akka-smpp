@@ -1,9 +1,12 @@
 package akkasmpp.protocol
 
+import org.junit.runner.RunWith
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FunSpec, ShouldMatchers}
 
+@RunWith(classOf[JUnitRunner])
 class OctetStringTest extends FunSpec with ShouldMatchers with GeneratorDrivenPropertyChecks {
 
   describe("OctetString") {

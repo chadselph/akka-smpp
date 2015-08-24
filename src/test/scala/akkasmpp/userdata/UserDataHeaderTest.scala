@@ -1,8 +1,11 @@
 package akkasmpp.userdata
 
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.{Matchers, FunSuite}
 import akkasmpp.protocol.OctetString
 
+@RunWith(classOf[JUnitRunner])
 class UserDataHeaderTest extends FunSuite with Matchers {
 
   test("parsing a valid UDH header") {

@@ -14,6 +14,8 @@ import akkasmpp.protocol.auth.{BindRequest, BindAuthenticator}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.Success
+import scala.language.implicitConversions
 
 object Demo extends App {
 

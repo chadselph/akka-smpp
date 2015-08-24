@@ -1,7 +1,10 @@
 package akkasmpp.userdata
 
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.{Matchers, FunSuite}
 
+@RunWith(classOf[JUnitRunner])
 class CharacterEncodingStrategyTest extends FunSuite with Matchers {
 
   test("splitting up messages based on encoding works") {

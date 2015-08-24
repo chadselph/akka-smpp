@@ -1,0 +1,14 @@
+type: maven
+name: messaging-akka-smpp
+bump_version: true
+
+targets:
+  - cent6
+
+build:
+  commands:
+    - mvn -Pscala-2.10 clean test deploy
+
+  dependencies:
+    - "apache-maven >= 3.0.4"
+    - "jdk-7-oracle"
