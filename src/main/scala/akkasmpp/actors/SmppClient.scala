@@ -109,6 +109,8 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       self ! error
   }(context.dispatcher)
 
+  context.setReceiveTimeout(config.enquireLinkTimer * 2)
+
   log.info(s"Connecting to server at " + config.bindTo.toString)
   context.watch(connection)
 
@@ -140,6 +142,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       // XXX: receive timeout?
       context.become(binding(sender()))
     case cc: ConnectionClosed => throw new PeerClosed()
+    case ReceiveTimeout => disconnect(new PeerTimedOut(config.enquireLinkTimer * 2))
   }
 
   def binding(requester: ActorRef): Actor.Receive = {
@@ -158,9 +161,10 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
         }
         context.become(bound)
       } else {
-        throw new BindFailed(p.commandStatus)
+        disconnect(new BindFailed(p.commandStatus))
       }
     case cc: ConnectionClosed => throw new PeerClosed()
+    case ReceiveTimeout => disconnect(new PeerTimedOut(config.enquireLinkTimer * 2))
 
   }
 
@@ -200,7 +204,17 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
 
     case cc: ConnectionClosed => throw new PeerClosed()
 
-    case ReceiveTimeout => throw new PeerTimedOut(config.enquireLinkTimer * 2)
+    case ReceiveTimeout => disconnect(new PeerTimedOut(config.enquireLinkTimer * 2))
 
   }
+
+  /**
+   * Disconnect from the connection and throw an exception to our supervisor.
+   * @param reason The reason is important for the supervisor strategy to decide about restarting.
+   */
+  def disconnect(reason: Throwable) = {
+    connection ! akka.actor.Status.Failure(reason)
+    throw reason
+  }
+
 }
