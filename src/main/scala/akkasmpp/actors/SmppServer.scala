@@ -1,85 +1,79 @@
 package akkasmpp.actors
 
 import java.net.InetSocketAddress
-import akka.actor.{ActorSystem, Actor, Deploy, ActorRef, ActorLogging, Stash, Props}
-import scala.concurrent.duration._
-import akka.io.{IO, Tcp}
-import akkasmpp.experimental.{TcpReadWriteAdapter, TcpPipelineHandler}
-import akkasmpp.experimental.TcpPipelineHandler.WithinActorContext
-import akkasmpp.protocol.{PduLogger, SmppTypes, BindRespLike, BindLike, EsmeResponse, SmscRequest, OctetString, Tag, Tlv, COctetString, CommandStatus, BindTransceiverResp, BindTransmitter, BindReceiver, BindTransceiver, AtomicIntegerSequenceNumberGenerator, Pdu, SmppFramePipeline}
-import akkasmpp.protocol.SmppTypes.SequenceNumber
-import akkasmpp.actors.SmppServerHandler.SmppPipeLine
-import java.nio.charset.Charset
-import akkasmpp.actors.SmppServer.SendRawPdu
+
+import akka.actor._
+import akka.pattern.pipe
+import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.{Materializer, OverflowStrategy}
+import akkasmpp.actors.SmppServer.{Disconnected, NewConnection, SendRawPdu}
+import akkasmpp.extensions.Smpp
+import akkasmpp.extensions.Smpp.ServerBinding
 import akkasmpp.protocol.CommandStatus.CommandStatus
+import akkasmpp.protocol.SmppTypes.SequenceNumber
+import akkasmpp.protocol._
+import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest, BindResponseError, BindResponseSuccess}
+
+import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 case class SmppServerConfig(bindAddr: InetSocketAddress, enquireLinkTimeout: Duration = 60.seconds)
 
 object SmppServer {
 
   case class SendRawPdu(p: (SequenceNumber) => SmscRequest)
+  case class NewConnection(connection: ActorRef)
+  case object Disconnected
+  case class BindResult(result: Boolean)
 
-  def props(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler,
-            pduLogger: PduLogger = PduLogger.default) =
-    Props(classOf[SmppServer], config, handlerSpec, pduLogger)
+  def props(config: SmppServerConfig, handlerSpec: => SmppServerHandler, pduLogger: PduLogger = PduLogger.default)
+           (implicit mat: Materializer) =
+    Props(new SmppServer(config, handlerSpec, pduLogger))
 
-  def run(host: String, port: Int, enquireLinkTimeout: Duration = 60.seconds)
-         (actor: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler)
-         (implicit as: ActorSystem) = {
-    as.actorOf(SmppServer.props(
-      SmppServerConfig(new InetSocketAddress(host, port), enquireLinkTimeout), actor))
-
-  }
 }
 
-class SmppServer(config: SmppServerConfig, handlerSpec: (SmppServerHandler.SmppPipeLine, ActorRef) => SmppServerHandler,
-                 pduLogger: PduLogger = PduLogger.default)
+class SmppServer(config: SmppServerConfig, handlerSpec: => SmppServerHandler, pduLogger: PduLogger = PduLogger.default)
+                (implicit val mat: Materializer)
   extends Actor with ActorLogging with Stash {
 
-  import context.system
-  import Tcp._
+  var target: ActorRef = null
+  val flow = Smpp(context.system).listen(config.bindAddr.getHostString, config.bindAddr.getPort,
+    idleTimeout = config.enquireLinkTimeout)
 
-  val manager = IO(Tcp)
+  val binding = flow.to(Sink.foreach(incomingConnection => {
+    val pduSource = Source.actorRef[Pdu](8, OverflowStrategy.dropNew) // this should really be an ActorPublisher
+                                                                      // so we can have back-pressure integrated
+    val handler = context.actorOf(Props(handlerSpec))
+    val pduSink = Sink.actorRef[Pdu](handler, Disconnected)
+    target = pduSource.map(pduLogger.doLogOutgoing).via(incomingConnection.flow.map(pduLogger.doLogIncoming))
+      .to(pduSink).run()
+    handler ! NewConnection(target)
+  })).run()
+  binding.onComplete {
+    case Success(ServerBinding(localAddr)) => log.info(s"Started new SMPP server listening on $localAddr")
+    case Failure(ex) => throw ex
+  }(context.dispatcher)
 
-  log.info(s"Starting new SMPP server listening on ${config.bindAddr}")
-  manager ! Bind(self, config.bindAddr)
-
-  override def receive = {
-    case Bound(localAddress) =>
-      log.info(s"SMPP server bound to $localAddress")
-    case CommandFailed(b: Bind) =>
-      log.error(s"Failed to bind $b")
-      context stop self
-    case Connected(remote, local) =>
-      log.info(s"New connection from $remote")
-      /*
-      New SMPP connection, need to start a handler.
-       */
-      val connection = sender
-      log.debug(s"connection is $connection")
-      val init = TcpPipelineHandler.withLogger(log, new SmppFramePipeline(pduLogger) >> new TcpReadWriteAdapter)
-      val handler = context.actorOf(Props(handlerSpec(init, connection)))
-      val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler).withDeploy(Deploy.local))
-      sender ! Register(pipeline)
+  def receive = {
+    case x: BindTransceiver =>
+      println(x)
+      target ! BindTransceiverResp(CommandStatus.ESME_ROK, x.sequenceNumber, None, None)
+    case x => println(x)
   }
-
 }
 
-object SmppServerHandler {
-  type SmppPipeLine = TcpPipelineHandler.Init[WithinActorContext, Pdu, Pdu]
+abstract class SmppServerHandler extends SmppActor with ActorLogging {
 
-  def props(wire: SmppPipeLine) = Props(classOf[SmppServerHandler], wire)
-}
-
-abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRef)
-  extends SmppActor with ActorLogging {
-
-  implicit val cs = Charset.forName("UTF-8")
   val sequenceNumberGen = new AtomicIntegerSequenceNumberGenerator
   var window = Map[SequenceNumber, ActorRef]()
   val serverSystemId = "akka"
+  implicit val ec = context.dispatcher
 
-  override def receive: Actor.Receive = binding
+  override def receive: Actor.Receive = {
+    case NewConnection(conn) =>
+      context.watch(conn)
+      context.become(binding(conn))
+  }
 
   type BindResponse = (CommandStatus, SmppTypes.Integer, Option[COctetString], Option[Tlv]) => BindRespLike
   // XXX: figure out how to incorporate bind auth
@@ -90,30 +84,27 @@ abstract class SmppServerHandler(val wire: SmppPipeLine, val connection: ActorRe
       Some(Tlv(Tag.SC_interface_version, OctetString(0x34: Byte))))
   }
 
-  def binding: Actor.Receive = {
-    case wire.Event(bt: BindTransceiver) =>
-      sender ! wire.Command(doBind(bt, BindTransceiverResp.apply))
-      context.become(bound)
-    case wire.Event(br: BindReceiver) =>
-      sender ! wire.Command(doBind(br, BindTransceiverResp.apply))
-      context.become(bound)
-    case wire.Event(bt: BindTransmitter) =>
-      sender ! wire.Command(doBind(bt, BindTransceiverResp.apply))
-      context.become(bound)
-
+  def binding(connection: ActorRef): Actor.Receive = {
+    case bt: BindLike =>
+      bindAuthenticator.allowBind(BindRequest.fromBindLike(bt)).pipeTo(self)
+    case BindResponseSuccess(pdu) =>
+      connection ! pdu
+      context.become(bound(connection))
+    case BindResponseError(pdu) =>
+      connection ! pdu
   }
 
   // XXX: split out into bound transmit vs bound receive
-  def bound: Actor.Receive
+  def bound(connection: ActorRef): Actor.Receive
+  def bindAuthenticator: BindAuthenticator
 
   def smscRequestReply: Actor.Receive = {
     case SendRawPdu(p) =>
       val pdu = p(sequenceNumberGen.next)
-      log.info(s"Sending raw pdu $pdu to $connection")
-      // seems to be a design flaw in Pipelines...
-      connection ! Tcp.Write(pdu.toByteString)
-      window = window.updated(pdu.sequenceNumber, sender)
-    case wire.Event(r: EsmeResponse) if window.contains(r.sequenceNumber) =>
+      log.info(s"Sending raw pdu $pdu to ")
+      // XXX: send tcp?
+      window = window.updated(pdu.sequenceNumber, sender())
+    case r: EsmeResponse if window.contains(r.sequenceNumber) =>
       log.debug(s"Forwarding along $r")
       window(r.sequenceNumber) ! r
       window = window - r.sequenceNumber

@@ -1,15 +1,19 @@
 package akkasmpp
+
 import java.net.InetSocketAddress
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem, Terminated}
+import akka.http.scaladsl.Http
 import akka.io.{IO, Tcp}
-import akka.pattern.ask
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import akkasmpp.actors.SmppClient.{Bind, SendRawPdu}
-import akkasmpp.actors.{SmppClient, SmppClientConfig, SmppPartials, SmppServer, SmppServerHandler}
-import akkasmpp.protocol.EsmClass.{MessageType, MessagingMode}
-import akkasmpp.protocol.{COctetString, CommandStatus, DataCodingScheme, EsmClass, GenericNack, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, SmscRequest, SubmitSm, SubmitSmResp, TypeOfNumber}
+import akkasmpp.actors.SmppClient.SendEnquireLink
+import akkasmpp.actors.SmppServer.Disconnected
+import akkasmpp.actors._
+import akkasmpp.protocol._
+import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Success
 import scala.language.implicitConversions
@@ -17,30 +21,72 @@ import scala.language.implicitConversions
 object Demo extends App {
 
   implicit val actorSystem = ActorSystem("demo")
+  implicit val materializer = ActorMaterializer()
+  implicit val ec = actorSystem.dispatcher
   val manager = IO(Tcp)
 
+  val pduBuilder = new PduBuilder()
+
   implicit val t: Timeout = 5.seconds
-  import scala.concurrent.ExecutionContext.Implicits.global
-  /*
-    Demo server
-   */
 
-  SmppServer.run("localhost", 2775) { (wire, connection) =>
-    new SmppServerHandler(wire, connection) with SmppPartials {
+  Http(actorSystem).bind("", port=1025).runForeach({ connection =>
+    connection.flow
+  })
 
-      override def bound = enquireLinkResponder orElse processSubmitSm
+  actorSystem.actorOf(SmppServer.props(SmppServerConfig(new InetSocketAddress("0.0.0.0", 2775)), new SmppServerHandler {
 
-      def processSubmitSm: Receive = {
-        case wire.Event(ss: SubmitSm) =>
-          log.info(s"SubmitSm with TLVs of ${ss.tlvs}")
-          sender ! wire.Command(SubmitSmResp(
-            CommandStatus.ESME_ROK, ss.sequenceNumber, Some(COctetString.ascii("abcde"))))
+
+    override val bindAuthenticator: BindAuthenticator = new BindAuthenticator {
+      override def allowBind(bindRequest: BindRequest) = {
+        Future.successful(
+          bindRequest.respondOk(Some(COctetString.utf8("akka-smpp-demo")))
+        )
       }
     }
-  }
+
+
+    // XXX: split out into bound transmit vs bound receive
+    override def bound(connection: ActorRef): Receive = {
+      case el: EnquireLink => connection ! EnquireLinkResp(el.sequenceNumber)
+      case submit: SubmitSm => connection ! SubmitSmResp(CommandStatus.ESME_ROK, submit.sequenceNumber, Some(COctetString.utf8("1234-asdf")))
+      case SendEnquireLink => connection ! EnquireLink(sequenceNumberGen.next)
+      case Terminated(`connection`) | Disconnected =>
+        context.stop(self)
+      case x => println("got " + x)
+    }
+  }, printlnPduLogger("server")))
+
+  // Demo Client
+
+  /*
+  val myClient = SmppClient.connect(SmppClientConfig(new InetSocketAddress("localhost", 2775), 30.seconds, None, Some(SmppClient.Bind("hello", "bud"))), {
+    case EnquireLink(sn) => EnquireLinkResp(sn)
+  },
+  "client", printlnPduLogger("client"))
+
+  Thread.sleep(3000)
+  println(myClient)
+  val submitSmF = myClient ? SendPdu(pduBuilder.submitSm(sourceAddr = COctetString.ascii("+15094302094"),
+    destinationAddr = COctetString.ascii("+181834234134"), shortMessage = OctetString.fromBytes(Array[Byte](0,0,0))))
+
+  submitSmF.onComplete(println)
+  */
+
+
+
 
 
   /*
+  c ? Bind("any", "any") onComplete { x =>
+    val f = c ? SendRawPdu(SubmitSm(_, "tyntec", TypeOfNumber.International, NumericPlanIndicator.E164, "15094302095", TypeOfNumber.International,
+      NumericPlanIndicator.E164, "15094302095", EsmClass(MessagingMode.Default, MessageType.NormalMessage), 0x0,
+      Priority.Level0, NullTime, NullTime, RegisteredDelivery(0x0.toByte), false, DataCodingScheme.SmscDefaultAlphabet, 0x0, 0x0, OctetString.empty, Nil))
+
+    f.onComplete {
+      case Success(SubmitSmResp(commandStatus, _, _)) => println(s"command status was $commandStatus")
+      case other => println(s"Unexpected response: $other")
+    }
+  }
     Demo client
 
   for (creds <- List(("smppclient1", "password"), ("user2", "pass2"))) {
@@ -54,31 +100,13 @@ object Demo extends App {
     f.mapTo[SendMessageAck].onComplete { ack =>
       println(ack)
     }
-    (client ? SendMessage("hahahaa", Did("+15094302095"), Did("+44134243"))) onComplete { x =>
-      println(x)
-    }
-
-    (client ? SendRawPdu(EnquireLink)) onComplete { x =>
-      println(x)
-    }
   }
+
    */
 
-  val c = SmppClient.connect(SmppClientConfig(new InetSocketAddress("ec2-184-73-153-156.compute-1.amazonaws.com", 2775)), {
-    case d: SmscRequest => GenericNack(CommandStatus.ESME_RINVCMDID, d.sequenceNumber)
-  }, "client")
-
-  implicit def str2CoctetString(s: String): COctetString = COctetString.utf8(s)
-
-  c ? Bind("any", "any") onComplete { x =>
-    val f = c ? SendRawPdu(SubmitSm(_, "tyntec", TypeOfNumber.International, NumericPlanIndicator.E164, "15094302095", TypeOfNumber.International,
-    NumericPlanIndicator.E164, "15094302095", EsmClass(MessagingMode.Default, MessageType.NormalMessage), 0x0,
-    Priority.Level0, NullTime, NullTime, RegisteredDelivery(0x0.toByte), false, DataCodingScheme.SmscDefaultAlphabet, 0x0, 0x0, OctetString.empty, Nil))
-
-    f.onComplete {
-      case Success(SubmitSmResp(commandStatus, _, _)) => println(s"command status was $commandStatus")
-      case other => println(s"Unexpected response: $other")
-    }
+  def printlnPduLogger(prefix: String) = new PduLogger {
+    override def logOutgoing(pdu: Pdu): Unit = println(s"$prefix OUT: $pdu")
+    override def logIncoming(pdu: Pdu): Unit = println(s"$prefix IN : $pdu")
   }
 
 }

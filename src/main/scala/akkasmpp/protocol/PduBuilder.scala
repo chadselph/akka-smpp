@@ -10,14 +10,42 @@ case class PduBuilder(defaultServiceType: ServiceType.ServiceType = ServiceType.
                       defaultTypeOfNumber: TypeOfNumber.TypeOfNumber = TypeOfNumber.International,
                       defaultNumericPlanIndicator: NumericPlanIndicator.NumericPlanIndicator = NumericPlanIndicator.E164,
                       defaultEsmClass: EsmClass = EsmClass(EsmClass.MessagingMode.Default, EsmClass.MessageType.NormalMessage),
-                      defaultProtocolId: Byte = 0x34,
+                      defaultProtocolId: Byte = 0x0,
                       defaultPriority: Priority.Priority = Priority.Level0,
                       defaultRegisteredDelivery: RegisteredDelivery = RegisteredDelivery(),
                       defaultReplaceIfPresentFlag: Boolean = false,
                       defaultDataCodingScheme: DataCodingScheme.DataCodingScheme = DataCodingScheme.SmscDefaultAlphabet,
-                      defaultTlvs: List[Tlv] = Nil
-                       ) {
+                      defaultTlvs: List[Tlv] = Nil,
+                      defaultSystemType: COctetString = COctetString.empty,
+                      defaultInterfaceVersion: Byte = 0x34,
+                      defaultAddressRange: COctetString = COctetString.empty) {
 
+  def bindTransmitter(systemId: COctetString, password: COctetString,
+                      systemType: COctetString = defaultSystemType,
+                      interfaceVersion: Byte = defaultInterfaceVersion,
+                      addrTon: TypeOfNumber.TypeOfNumber = defaultTypeOfNumber,
+                      addrNpi: NumericPlanIndicator.NumericPlanIndicator = defaultNumericPlanIndicator,
+                      addressRange: COctetString = defaultAddressRange): (SequenceNumber) => BindTransmitter = {
+    BindTransmitter(_, systemId, password, systemType, interfaceVersion, addrTon, addrNpi, addressRange)
+  }
+
+  def bindTransceiver(systemId: COctetString, password: COctetString,
+                      systemType: COctetString = defaultSystemType,
+                      interfaceVersion: Byte = defaultInterfaceVersion,
+                      addrTon: TypeOfNumber.TypeOfNumber = defaultTypeOfNumber,
+                      addrNpi: NumericPlanIndicator.NumericPlanIndicator = defaultNumericPlanIndicator,
+                      addressRange: COctetString = defaultAddressRange): (SequenceNumber) => BindTransceiver = {
+    BindTransceiver(_, systemId, password, systemType, interfaceVersion, addrTon, addrNpi, addressRange)
+  }
+
+  def bindReceiver(systemId: COctetString, password: COctetString,
+                   systemType: COctetString = defaultSystemType,
+                   interfaceVersion: Byte = defaultInterfaceVersion,
+                   addrTon: TypeOfNumber.TypeOfNumber = defaultTypeOfNumber,
+                   addrNpi: NumericPlanIndicator.NumericPlanIndicator = defaultNumericPlanIndicator,
+                   addressRange: COctetString = defaultAddressRange): (SequenceNumber) => BindReceiver = {
+    BindReceiver(_, systemId, password, systemType, interfaceVersion, addrTon, addrNpi, addressRange)
+  }
 
   def submitSm(serviceType: ServiceType.ServiceType = defaultServiceType,
                sourceAddrTon: TypeOfNumber.TypeOfNumber = defaultTypeOfNumber,
@@ -36,8 +64,7 @@ case class PduBuilder(defaultServiceType: ServiceType.ServiceType = ServiceType.
                dataCoding: DataCodingScheme.DataCodingScheme = defaultDataCodingScheme,
                smDefaultMsgId: Byte = 0,
                shortMessage: OctetString,
-               tlvs: List[Tlv] = defaultTlvs
-                ): (SequenceNumber) => SubmitSm = {
+               tlvs: List[Tlv] = defaultTlvs): (SequenceNumber) => SubmitSm = {
     SubmitSm(_, serviceType, sourceAddrTon, sourceAddrNpi, sourceAddr, destAddrTon, destAddrNpi, destinationAddr,
       esmClass, protocolId, priorityFlag, scheduleDeliveryTime, validityPeriod, registeredDelivery, replaceIfPresentFlag,
       dataCoding, smDefaultMsgId, shortMessage.size.toByte, shortMessage, tlvs)
@@ -60,8 +87,7 @@ case class PduBuilder(defaultServiceType: ServiceType.ServiceType = ServiceType.
                dataCoding: DataCodingScheme.DataCodingScheme = defaultDataCodingScheme,
                smDefaultMsgId: Byte = 0,
                shortMessage: OctetString,
-               tlvs: List[Tlv] = defaultTlvs
-                ): (SequenceNumber) => DeliverSm = {
+               tlvs: List[Tlv] = defaultTlvs): (SequenceNumber) => DeliverSm = {
     DeliverSm(_, serviceType, sourceAddrTon, sourceAddrNpi, sourceAddr, destAddrTon, destAddrNpi, destinationAddr,
       esmClass, protocolId, priorityFlag, scheduleDeliveryTime, validityPeriod, registeredDelivery, replaceIfPresentFlag,
       dataCoding, smDefaultMsgId, shortMessage.size.toByte, shortMessage, tlvs)

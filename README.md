@@ -1,24 +1,93 @@
 ## Akka SMPP Server
-Impementation of SMPP 3.4 in Akka using akka-io.
+Impementation of SMPP 3.4 in Akka using akka-streams.
 
 Currently this is pretty bare-bones; constants have been mostly defined.
 Case classes exist for all the PDUs. Parsing PDUs from TCP and
 serializing them works.
 
+## Example Usage
 
-### Todo
+SMPP is implemented as an akka extension and is inspired by akka-http/spray.
+
+To start an SMPP server:
+
+```scala
+implicit val system = ActorSystem()
+implicit val mat = ActorMaterializer()
+
+val pduEcho: Flow[EsmeRequest, SmscResponse, Unit].map(identity)
+
+val binding = Smpp(system).listen(interface = "", port = 2775)
+binding.connections.foreach { connection =>
+  connection.handle(pduEcho)
+}
+```
+
+If you don't want to create a Flow manually, you can create a simple one
+using the SMPPServerFlow:
+
+```scala
+
+class MyServerFlow extends SmppServerFlow {
+  override def handleBindTransmitter(bindRequest: BindTransmitter): Future[BindTransmitterResp] = future {
+    if(bindRequest.systemId == "admin") {
+        BindTransmitterResp(CommandStatus.ESME_ROK, bindRequest.sequenceNumber, None, None)
+    } else {
+        BindTransmitterResp(CommandStatus.ESME_EINVSMSCID, bindRequest.sequenceNumber, None, None)
+    }
+  }
+
+  override def handleSubmitSm(submitSm): Future[SubmitSmResp] = {
+
+    val msgId = "123412"
+    system.dispatcher.scheduler(5.seconds) {
+      val f = this.submitDeliverSm(...) // fake delivery receipt
+      f.onComplete {
+        case Success(rsp: SubmitSmResp) => // esme got dlr
+        case Failure(ex) => // maybe retry or something
+      }
+    }
+    Future.successful(SubmitSmResp(CommandStatus.ESME_ROK, submitSm.sequenceNumber, Some(msgId))
+  }
+}
+
+```
+
+Each of the methods return a Future of the response type to allow for async or synchronous
+responses. If the future fails with an `SmppProtocolException(commandStatus)`, then it
+will return a `GenericNack` with `commandStatus` as the error. If the future fails any other way,
+the response PDU will be a `GenericNack` with error of ESME_RSYSERR.
+
+To change this behavior, override `handleError` which is a `PartialFunction[(Exception, EsmeRequest), SmscResponse]`
+
+
+## Todo
 - Parse valid TLVs
 - Framework for validating Bind / BindResp in server
 - Switch out Enumeration for something better with AnyVal
 - More PDU Builders
-- Rewrite TCP layer in new akka-stream
+- Make examples work
+- Language for SMPP test suites
 
-## Example Usage
-See Demo.scala for an example usage of an SMPP Client 
+
+## SMPP Test Suites (TODO, documentation driven development)
+
+Suppose you want to verify the behavior of your vendor for some particular
+edge case or strange scenario. This section is for you. 
 
 ```scala
-  val client = actorSystem.actorOf(Props(new SmppClient(new InetSocketAddress("localhost", 2775))))
-  client ! EnquireLink(16, 4)
+
+withBoundClient("host", 2775, "user", "pass") { client =>
+  val sn1 = client.getNextSequenceNumber
+  val submitSm = PduBuilder.submitSm(to="my-handset-number", from="+12345678900", shortMessage=OctectString.ascii("2 msg with same seq#"))
+  client.send(submitSm(sn1))
+  client.send(submitSm(sn1))
+  // did we receive the message twice on our handset?
+  
+  val sn2 = client.getNextSequenceNumber
+  val submitSm3 = submitSm2.copy(shortMessage = OctetString.ascii("same seq number, but different content"))
+}
+
 ```
 
 ## Coding Style
@@ -38,14 +107,14 @@ the idea of having the protocol case classes be opinionated enough to have "defa
 became a pain point of using the API. Instead, reasonable defaults now live in the `akkasmpp.protocol.PduBuilder`.
 
 ```scala
-   import akkasmpp.protocol.PduBuilder
-   import akkasmpp.protocol.ParameterTypes.{TypeOfNumber, COctetString, OctetString}
+  import akkasmpp.protocol.PduBuilder
+  import akkasmpp.protocol.ParameterTypes.{TypeOfNumber, COctetString, OctetString}
 
-   val source: COctetString = COctetString
-   val dest: COctetString =
-   val msg: OctetString = OctetString(99, 104, 0, 100)
-   val builder = new PduBuilder(defaultTypeOfNumber = TypeOfNumber.International) // override any defaults you want in here with by-name parameters
-   builder.submitSm(sourceAddr = source, destinationAddr = dest, shortMessage = msg) // also lets you override anything
+  val source: COctetString = COctetString
+  val dest: COctetString =
+  val msg: OctetString = OctetString(99, 104, 0, 100)
+  val builder = new PduBuilder(defaultTypeOfNumber = TypeOfNumber.International) // override any defaults you want in here with by-name parameters
+  builder.submitSm(sourceAddr = source, destinationAddr = dest, shortMessage = msg) // also lets you override anything
 ```
 
 # Similar Projects

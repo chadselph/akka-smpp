@@ -6,6 +6,16 @@ import akka.actor.ActorRef
 trait PduLogger {
   def logIncoming(pdu: Pdu)
   def logOutgoing(pdu: Pdu)
+
+  private [akkasmpp] final def doLogIncoming(pdu: Pdu): Pdu = {
+    logIncoming(pdu)
+    pdu
+  }
+
+  private [akkasmpp] final def doLogOutgoing(pdu: Pdu) = {
+    logOutgoing(pdu)
+    pdu
+  }
 }
 
 object PduLogger {
