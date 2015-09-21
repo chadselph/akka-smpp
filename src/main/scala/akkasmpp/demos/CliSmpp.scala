@@ -42,7 +42,7 @@ object CliSmpp extends App {
 
   def getDest() = COctetString.ascii("+15094302095")
 
-  def getSrc() = COctetString.ascii("+15095456717")
+  def getSrc() = COctetString.ascii("+12512161914")
 
   def getShortMsg() = OctetString.fromBytes(DefaultGsmCharset.encode("This was a triumph."))
 
@@ -58,6 +58,7 @@ object CliSmpp extends App {
     case Array(server, port, "--ssl") if port.forall(_.isDigit) =>
       RunConfig(server, port.toInt, true)
     case Array(server) => RunConfig(server, 2775, false)
+    case Array() => RunConfig("localhost", 2775, false)
   }
 
   case object UserInput
@@ -88,7 +89,8 @@ object CliSmpp extends App {
         client ! Bind("someasfd", "asfd", mode = SmppClient.Transceiver)
         self ! UserInput
       case "ss" =>
-        client ! SendPdu(pduBuilder.submitSm(destinationAddr = getDest(), sourceAddr = getSrc(), shortMessage = getShortMsg()))
+        client ! SendPdu(pduBuilder.submitSm(destinationAddr = getDest(), sourceAddr = getSrc(),
+          shortMessage = getShortMsg(), serviceType=COctetString.ascii("twilio")))
         self ! UserInput
       case "el" =>
         client ! SendPdu(EnquireLink)

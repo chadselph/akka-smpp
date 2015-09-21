@@ -98,11 +98,12 @@ abstract class SmppServerHandler extends SmppActor with ActorLogging {
   def bound(connection: ActorRef): Actor.Receive
   def bindAuthenticator: BindAuthenticator
 
-  def smscRequestReply: Actor.Receive = {
-    case SendRawPdu(p) =>
+  def smscRequestReply(connection: ActorRef): Actor.Receive = {
+    case SendRawPdu(p) => // <-- XXX: fix this name
       val pdu = p(sequenceNumberGen.next)
       log.info(s"Sending raw pdu $pdu to ")
       // XXX: send tcp?
+      connection ! pdu
       window = window.updated(pdu.sequenceNumber, sender())
     case r: EsmeResponse if window.contains(r.sequenceNumber) =>
       log.debug(s"Forwarding along $r")
