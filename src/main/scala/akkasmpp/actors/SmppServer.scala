@@ -8,12 +8,14 @@ import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.{Materializer, OverflowStrategy}
 import akkasmpp.actors.SmppServer.{Disconnected, NewConnection, SendRawPdu}
 import akkasmpp.extensions.Smpp
+import akkasmpp.extensions.Smpp.ServerBinding
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.protocol._
 import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest, BindResponseError, BindResponseSuccess}
 
 import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 case class SmppServerConfig(bindAddr: InetSocketAddress, enquireLinkTimeout: Duration = 60.seconds)
 
@@ -35,18 +37,22 @@ class SmppServer(config: SmppServerConfig, handlerSpec: => SmppServerHandler, pd
   extends Actor with ActorLogging with Stash {
 
   var target: ActorRef = null
-  log.info(s"Starting new SMPP server listening on ${config.bindAddr}")
   val flow = Smpp(context.system).listen(config.bindAddr.getHostString, config.bindAddr.getPort,
     idleTimeout = config.enquireLinkTimeout)
 
-  flow.runForeach(incomingConnection => {
-    val pduSource = Source.actorRef[Pdu](8, OverflowStrategy.fail)
+  val binding = flow.to(Sink.foreach(incomingConnection => {
+    val pduSource = Source.actorRef[Pdu](8, OverflowStrategy.dropNew) // this should really be an ActorPublisher
+                                                                      // so we can have back-pressure integrated
     val handler = context.actorOf(Props(handlerSpec))
     val pduSink = Sink.actorRef[Pdu](handler, Disconnected)
     target = pduSource.map(pduLogger.doLogOutgoing).via(incomingConnection.flow.map(pduLogger.doLogIncoming))
       .to(pduSink).run()
     handler ! NewConnection(target)
-  })
+  })).run()
+  binding.onComplete {
+    case Success(ServerBinding(localAddr)) => log.info(s"Started new SMPP server listening on $localAddr")
+    case Failure(ex) => throw ex
+  }(context.dispatcher)
 
   def receive = {
     case x: BindTransceiver =>
@@ -64,7 +70,9 @@ abstract class SmppServerHandler extends SmppActor with ActorLogging {
   implicit val ec = context.dispatcher
 
   override def receive: Actor.Receive = {
-    case NewConnection(conn) => context.become(binding(conn))
+    case NewConnection(conn) =>
+      context.watch(conn)
+      context.become(binding(conn))
   }
 
   type BindResponse = (CommandStatus, SmppTypes.Integer, Option[COctetString], Option[Tlv]) => BindRespLike

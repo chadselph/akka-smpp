@@ -67,6 +67,28 @@ To change this behavior, override `handleError` which is a `PartialFunction[(Exc
 - Switch out Enumeration for something better with AnyVal
 - More PDU Builders
 - Make examples work
+- Language for SMPP test suites
+
+
+## SMPP Test Suites (TODO, documentation driven development)
+
+Suppose you want to verify the behavior of your vendor for some particular
+edge case or strange scenario. This section is for you. 
+
+```scala
+
+withBoundClient("host", 2775, "user", "pass") { client =>
+  val sn1 = client.getNextSequenceNumber
+  val submitSm = PduBuilder.submitSm(to="my-handset-number", from="+12345678900", shortMessage=OctectString.ascii("2 msg with same seq#"))
+  client.send(submitSm(sn1))
+  client.send(submitSm(sn1))
+  // did we receive the message twice on our handset?
+  
+  val sn2 = client.getNextSequenceNumber
+  val submitSm3 = submitSm2.copy(shortMessage = OctetString.ascii("same seq number, but different content"))
+}
+
+```
 
 ## Coding Style
 
