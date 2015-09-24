@@ -117,7 +117,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
   def receive = connecting
 
   def connecting: Actor.Receive = {
-    case conn @ Smpp.OutgoingConnection(remote, local) =>
+    case conn @ Smpp.OutgoingSmppConnection(remote, local) =>
       log.info(s"Connection established to server at $remote")
       context.parent ! conn
       config.autoBind.foreach { self.tell(_, context.parent) } // send bind command to yourself if it's configured for autobind

@@ -8,12 +8,13 @@ import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.{Materializer, OverflowStrategy}
 import akkasmpp.actors.SmppServer.{Disconnected, NewConnection, SendRawPdu}
 import akkasmpp.extensions.Smpp
-import akkasmpp.extensions.Smpp.ServerBinding
+import akkasmpp.extensions.Smpp.{IncomingSmppConnection, ServerBinding}
 import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.protocol._
 import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest, BindResponseError, BindResponseSuccess}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
@@ -33,14 +34,16 @@ object SmppServer {
 }
 
 class SmppServer(config: SmppServerConfig, handlerSpec: => SmppServerHandler, pduLogger: PduLogger = PduLogger.default)
-                (implicit val mat: Materializer)
-  extends Actor with ActorLogging with Stash {
+                (implicit val mat: Materializer) extends Actor with ActorLogging with Stash {
 
   var target: ActorRef = null
-  val flow = Smpp(context.system).listen(config.bindAddr.getHostString, config.bindAddr.getPort,
-    idleTimeout = config.enquireLinkTimeout)
 
-  val binding = flow.to(Sink.foreach(incomingConnection => {
+  // ingress flow
+  val flow: Source[IncomingSmppConnection, Future[ServerBinding]] =
+    Smpp(context.system).listen(config.bindAddr.getHostString, config.bindAddr.getPort,
+      idleTimeout = config.enquireLinkTimeout)
+
+  val binding = flow.to(Sink.foreach { incomingConnection =>
     val pduSource = Source.actorRef[Pdu](8, OverflowStrategy.dropNew) // this should really be an ActorPublisher
                                                                       // so we can have back-pressure integrated
     val handler = context.actorOf(Props(handlerSpec))
@@ -48,7 +51,8 @@ class SmppServer(config: SmppServerConfig, handlerSpec: => SmppServerHandler, pd
     target = pduSource.map(pduLogger.doLogOutgoing).via(incomingConnection.flow.map(pduLogger.doLogIncoming))
       .to(pduSink).run()
     handler ! NewConnection(target)
-  })).run()
+  }).run()
+
   binding.onComplete {
     case Success(ServerBinding(localAddr)) => log.info(s"Started new SMPP server listening on $localAddr")
     case Failure(ex) => throw ex
@@ -68,6 +72,10 @@ abstract class SmppServerHandler extends SmppActor with ActorLogging {
   var window = Map[SequenceNumber, ActorRef]()
   val serverSystemId = "akka"
   implicit val ec = context.dispatcher
+
+  // XXX: split out into bound transmit vs bound receive
+  def bound(connection: ActorRef): Actor.Receive
+  def bindAuthenticator: BindAuthenticator
 
   override def receive: Actor.Receive = {
     case NewConnection(conn) =>
@@ -93,10 +101,6 @@ abstract class SmppServerHandler extends SmppActor with ActorLogging {
     case BindResponseError(pdu) =>
       connection ! pdu
   }
-
-  // XXX: split out into bound transmit vs bound receive
-  def bound(connection: ActorRef): Actor.Receive
-  def bindAuthenticator: BindAuthenticator
 
   def smscRequestReply(connection: ActorRef): Actor.Receive = {
     case SendRawPdu(p) => // <-- XXX: fix this name

@@ -75,7 +75,7 @@ object CliSmpp extends App {
     }
 
     override def receive: Receive = {
-      case Smpp.OutgoingConnection(_, _) =>
+      case Smpp.OutgoingSmppConnection(_, _) =>
         self ! UserInput
       case UserInput =>
         self ! Console.readLine("==> ").trim

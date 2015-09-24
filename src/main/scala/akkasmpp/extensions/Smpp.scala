@@ -21,6 +21,8 @@ import scala.concurrent.duration._
 
 class SmppExt(config: Config)(implicit system: ActorSystem) extends akka.actor.Extension {
 
+  import Smpp._
+
   type ServerLayer = BidiFlow[Pdu, ByteString, ByteString, Pdu, Unit]
 
   private val blueprint = BidiFlow() { builder =>
@@ -30,16 +32,18 @@ class SmppExt(config: Config)(implicit system: ActorSystem) extends akka.actor.E
     BidiShape(output, input)
   }
 
-  import Smpp._
   def listen(interface: String, port: Int = 2775, backlog: Int = 100,
            options: immutable.Traversable[Inet.SocketOption] = Nil,
            idleTimeout: Duration = Duration.Inf)
-          (implicit fm: Materializer): Source[IncomingConnection, Future[ServerBinding]] = {
+          (implicit fm: Materializer): Source[IncomingSmppConnection, Future[ServerBinding]] = {
+
     val tcpConnections = Tcp().bind(interface, port, backlog, options, idleTimeout = idleTimeout)
+
     tcpConnections.map {
       case Tcp.IncomingConnection(localAddress, remoteAddress, flow) =>
-        IncomingConnection(localAddress, remoteAddress, blueprint.join(flow))
+        IncomingSmppConnection(localAddress, remoteAddress, blueprint.join(flow))
     }
+
   }.mapMaterializedValue {
     _.map(tcpBinding => ServerBinding(tcpBinding.localAddress)(() => tcpBinding.unbind()))(fm.executionContext)
   }
@@ -51,35 +55,16 @@ class SmppExt(config: Config)(implicit system: ActorSystem) extends akka.actor.E
               halfClose: Boolean = true,
               connectTimeout: Duration = Duration.Inf,
               idleTimeout: Duration = Duration.Inf)
-             (implicit fm: Materializer): Flow[Pdu, Pdu, Future[OutgoingConnection]] = {
+             (implicit fm: Materializer): Flow[Pdu, Pdu, Future[OutgoingSmppConnection]] = {
 
     val connection = Tcp().outgoingConnection(remoteAddress, localAddress, options, halfClose, connectTimeout, idleTimeout)
     blueprint.joinMat(connection)(Keep.right).mapMaterializedValue(
       // XXX: maybe just use the Tcp.OutgoingConnection? is there actually a reason to wrap it?
-      _.map(tcp => OutgoingConnection(tcp.remoteAddress, tcp.localAddress))(fm.executionContext))
+      _.map(tcp => OutgoingSmppConnection(tcp.remoteAddress, tcp.localAddress))(fm.executionContext))
   }
 }
 
 object Smpp extends ExtensionId[SmppExt] with ExtensionIdProvider {
-
-  case class IncomingConnection(
-    localAddress: InetSocketAddress,
-    remoteAddress: InetSocketAddress,
-    flow: Flow[Pdu, Pdu, Unit]) {
-    /* is this needed?
-    def handle[Mat](f: Flow[Pdu, Pdu, Mat])(implicit mat: Materializer) = {
-      flow.joinMat(f)(Keep.right).run()
-    }
-    */
-  }
-
-  case class OutgoingConnection(remoteAddress: InetSocketAddress, localAddress: InetSocketAddress)
-
-
-  override def createExtension(system: ExtendedActorSystem): SmppExt =
-    new SmppExt(system.settings.config getConfig "smpp")(system)
-
-  override def lookup(): ExtensionId[_ <: Extension] = Smpp
 
   case class ServerBinding(localAddress: InetSocketAddress)(private val unbindAction: () ⇒ Future[Unit]) {
     /**
@@ -90,4 +75,23 @@ object Smpp extends ExtensionId[SmppExt] with ExtensionIdProvider {
      */
     def unbind(): Future[Unit] = unbindAction()
   }
+
+  case class IncomingSmppConnection(
+    localAddress: InetSocketAddress,
+    remoteAddress: InetSocketAddress,
+    flow: Flow[Pdu, Pdu, Unit]) {
+    /* is this needed?
+    def handle[Mat](f: Flow[Pdu, Pdu, Mat])(implicit mat: Materializer) = {
+      flow.joinMat(f)(Keep.right).run()
+    }
+    */
+  }
+
+  case class OutgoingSmppConnection(remoteAddress: InetSocketAddress, localAddress: InetSocketAddress)
+
+  override def createExtension(system: ExtendedActorSystem): SmppExt =
+    new SmppExt(system.settings.config getConfig "smpp")(system)
+
+  override def lookup(): ExtensionId[_ <: Extension] = Smpp
+
 }
