@@ -1,7 +1,6 @@
 package akkasmpp.actors
 
 import java.net.InetSocketAddress
-import javax.net.ssl.SSLContext
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorRefFactory, Props, ReceiveTimeout}
 import akka.io.Tcp.{ConnectionClosed, PeerClosed}
@@ -14,6 +13,7 @@ import akkasmpp.protocol.NumericPlanIndicator.NumericPlanIndicator
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.protocol.TypeOfNumber.TypeOfNumber
 import akkasmpp.protocol.{AtomicIntegerSequenceNumberGenerator, BindReceiver, BindRespLike, BindTransceiver, BindTransmitter, COctetString, CommandStatus, EnquireLink, EnquireLinkResp, EsmeRequest, EsmeResponse, GenericNack, NumericPlanIndicator, Pdu, PduLogger, SmscRequest, SmscResponse, TypeOfNumber, Unbind, UnbindResp}
+import akkasmpp.ssl.TlsContext
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -26,7 +26,7 @@ object SmppClient {
 
   abstract class SmppClientException(msg: String) extends Exception(msg)
   class PeerClosed extends SmppClientException("Peer dropped the connection unexpectedly.")
-  class PeerTimedOut(time: Duration) extends SmppClientException(s"Peer went too long without responding to messages ($time), resetting connection.")
+  class PeerTimedOut(time: Duration) extends SmppClientException(s"Peer went too long without responding to messages ($time)")
   class UnbindReceived extends SmppClientException("Peer sent Unbind request")
   class ConnectionFailed extends SmppClientException("Could not make TCP connection to the server.")
   class BindFailed(val errorCode: CommandStatus) extends SmppClientException("Bind failed with " + errorCode)
@@ -83,7 +83,7 @@ object SmppClient {
 }
 
 case class SmppClientConfig(bindTo: InetSocketAddress, enquireLinkTimer: Duration = Duration.Inf,
-                            sslContext: Option[SSLContext] = None, autoBind: Option[Bind] = None,
+                            tlsContext: Option[TlsContext] = None, autoBind: Option[Bind] = None,
                             connectTimeout: Duration = 5.seconds)
 
 /**
@@ -97,7 +97,7 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
   var window = Map[SequenceNumber, ActorRef]()
 
   val connectionFlow = Smpp(context.system).connect(config.bindTo, idleTimeout = config.enquireLinkTimer * 2,
-    connectTimeout = config.connectTimeout)
+    connectTimeout = config.connectTimeout, tlsContext = config.tlsContext)
   val pduSource = Source.actorRef[Pdu](8, OverflowStrategy.dropNew)
   val pduSink = Sink.actorRef[Pdu](self, PeerClosed)
   val (connection, connectionInfo) = pduSource.map(pduLogger.doLogOutgoing)
@@ -122,12 +122,15 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       context.parent ! conn
       config.autoBind.foreach { self.tell(_, context.parent) } // send bind command to yourself if it's configured for autobind
       context.become(bind)
+    case Failure(ex) =>
+      log.error(s"Connection could not be established. $ex")
+      throw ex
     case ex: Throwable =>
       log.error(s"Connection could not be established. $ex")
       throw ex
   }
 
-  def bind: Actor.Receive = {
+  def bind: Actor.Receive = connectedCommon orElse {
     case SmppClient.Bind(systemId, password, systemType, mode, addrTon, addrNpi) =>
       val bindFactory = mode match {
         case SmppClient.Transceiver => BindTransceiver(_, _, _, _, _, _, _, _)
@@ -141,11 +144,9 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       connection ! cmd
       // XXX: receive timeout?
       context.become(binding(sender()))
-    case cc: ConnectionClosed => throw new PeerClosed()
-    case ReceiveTimeout => disconnect(new PeerTimedOut(config.enquireLinkTimer * 2))
   }
 
-  def binding(requester: ActorRef): Actor.Receive = {
+  def binding(requester: ActorRef): Actor.Receive = connectedCommon orElse {
     // Future improvement: Type tags to ensure the response is the same as the request?
     case p: BindRespLike =>
       requester ! p
@@ -163,13 +164,10 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
       } else {
         disconnect(new BindFailed(p.commandStatus))
       }
-    case cc: ConnectionClosed => throw new PeerClosed()
-    case ReceiveTimeout => disconnect(new PeerTimedOut(config.enquireLinkTimer * 2))
-
   }
 
   import SmppClient.SendPdu
-  def bound: Actor.Receive = {
+  def bound: Actor.Receive = connectedCommon orElse {
     case SendPdu(newPdu) =>
       val pdu = newPdu(sequenceNumberGen.next)
       log.info(s"sending raw pdu $pdu")
@@ -201,11 +199,6 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
     case pdu: Pdu =>
       log.warning(s"Received unsupported pdu: $pdu responding with GenericNack")
       connection ! GenericNack(CommandStatus.ESME_RCANCELFAIL, pdu.sequenceNumber)
-
-    case cc: ConnectionClosed => throw new PeerClosed()
-
-    case ReceiveTimeout => disconnect(new PeerTimedOut(config.enquireLinkTimer * 2))
-
   }
 
   /**
@@ -215,6 +208,15 @@ class SmppClient(config: SmppClientConfig, receiver: ClientReceive, pduLogger: P
   def disconnect(reason: Throwable) = {
     connection ! akka.actor.Status.Failure(reason)
     throw reason
+  }
+
+  /**
+   * Common receive handlers for all the states where a TCP connection exists
+   */
+  def connectedCommon: Receive = {
+    case cc: ConnectionClosed => throw new PeerClosed()
+    case ReceiveTimeout => disconnect(new PeerTimedOut(config.enquireLinkTimer * 2))
+    case akka.actor.Status.Failure(ex) => disconnect(ex)
   }
 
 }

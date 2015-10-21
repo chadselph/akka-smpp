@@ -73,7 +73,7 @@ class SmppPduFramingStage(config: Config)
       val commandLength = bs.iterator.getInt
       if (commandLength > config.getInt("protocol.max-pdu-length") ||
         commandLength < config.getInt("protocol.min-pdu-length")) {
-        throw new Exception("Invalid command length.")
+        throw new SmppProtocolError(s"Invalid command length: ${commandLength}")
       } else if (bs.length < commandLength) {
         (bs, None)
       } else {
