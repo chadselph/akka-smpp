@@ -26,12 +26,6 @@ object Demo extends App {
 
   implicit val t: Timeout = 5.seconds
 
-  /*
-  Http(actorSystem).bind("", port=1025).runForeach({ connection =>
-    connection.flow
-  })
-   */
-
   actorSystem.actorOf(
       SmppServer.props(
           SmppServerConfig(new InetSocketAddress("0.0.0.0", 2775)),
