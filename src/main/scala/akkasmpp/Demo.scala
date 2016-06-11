@@ -3,7 +3,6 @@ package akkasmpp
 import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, ActorSystem, Terminated}
-import akka.http.scaladsl.Http
 import akka.io.{IO, Tcp}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
@@ -27,9 +26,11 @@ object Demo extends App {
 
   implicit val t: Timeout = 5.seconds
 
+  /*
   Http(actorSystem).bind("", port=1025).runForeach({ connection =>
     connection.flow
   })
+  */
 
   actorSystem.actorOf(SmppServer.props(SmppServerConfig(new InetSocketAddress("0.0.0.0", 2775)), new SmppServerHandler {
 
@@ -71,9 +72,6 @@ object Demo extends App {
   */
 
 
-
-
-
   /*
   c ? Bind("any", "any") onComplete { x =>
     val f = c ? SendRawPdu(SubmitSm(_, "tyntec", TypeOfNumber.International, NumericPlanIndicator.E164, "15094302095", TypeOfNumber.International,
@@ -104,6 +102,7 @@ object Demo extends App {
 
   def printlnPduLogger(prefix: String) = new PduLogger {
     override def logOutgoing(pdu: Pdu): Unit = println(s"$prefix OUT: $pdu")
+
     override def logIncoming(pdu: Pdu): Unit = println(s"$prefix IN : $pdu")
   }
 
