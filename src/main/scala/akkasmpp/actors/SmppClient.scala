@@ -40,10 +40,6 @@ object SmppClient {
     ac.actorOf(SmppClient.props(config, receive, pduLogger), name)
   }
 
-  object Implicits {
-    implicit def stringAsDid(s: String): Did = Did(s)
-  }
-
   abstract class BindMode
   object Transceiver extends BindMode
   object Transmitter extends BindMode
