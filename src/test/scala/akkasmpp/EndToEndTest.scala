@@ -19,7 +19,7 @@ import scala.concurrent.duration._
 /**
   * Spin up a client and server and try to send a message.
   */
-class TlsEndToEndTest
+class EndToEndBindTest
     extends FlatSpec
     with ShouldMatchers
     with Matchers
