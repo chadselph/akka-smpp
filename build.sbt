@@ -15,6 +15,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-stream" % akkaV,
   "com.typesafe.akka" %% "akka-slf4j" % "2.3.10",
   "com.cloudhopper" % "ch-commons-charset" % "3.0.2",
+  "com.typesafe.akka" %% "akka-testkit" % akkaV,
   "org.scalatest" %% "scalatest" % "2.2.1" % "test",
   "org.scalacheck" %% "scalacheck" % "1.11.5" % "test"
 )

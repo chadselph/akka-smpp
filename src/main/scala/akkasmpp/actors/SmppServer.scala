@@ -92,8 +92,9 @@ class SmppServer(config: SmppServerConfig,
     .run()
 
   binding.onComplete {
-    case Success(ServerBinding(localAddr)) =>
+    case Success(sb @ ServerBinding(localAddr)) =>
       log.info(s"Started new SMPP server listening on $localAddr")
+      context.parent ! sb
     case Failure(ex) => throw ex
   }(context.dispatcher)
 
