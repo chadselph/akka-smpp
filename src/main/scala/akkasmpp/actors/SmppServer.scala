@@ -9,7 +9,6 @@ import akka.stream.{Materializer, OverflowStrategy}
 import akkasmpp.actors.SmppServer.{Disconnected, NewConnection, SendRawPdu}
 import akkasmpp.extensions.Smpp
 import akkasmpp.extensions.Smpp.ServerBinding
-import akkasmpp.protocol.CommandStatus.CommandStatus
 import akkasmpp.protocol.SmppTypes.SequenceNumber
 import akkasmpp.protocol._
 import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest, BindResponseError, BindResponseSuccess}
@@ -75,18 +74,9 @@ abstract class SmppServerHandler extends SmppActor with ActorLogging {
       context.become(binding(conn))
   }
 
-  type BindResponse = (CommandStatus, SmppTypes.Integer, Option[COctetString], Option[Tlv]) => BindRespLike
-  // XXX: figure out how to incorporate bind auth
-  private def doBind(bindRecv: BindLike, respFactory: BindResponse) = {
-    log.info(s"got a bind like message $bindRecv")
-    respFactory(CommandStatus.ESME_ROK,
-      bindRecv.sequenceNumber, Some(COctetString.ascii(serverSystemId)),
-      Some(Tlv(Tag.SC_interface_version, OctetString(0x34: Byte))))
-  }
-
   def binding(connection: ActorRef): Actor.Receive = {
     case bt: BindLike =>
-      bindAuthenticator.allowBind(BindRequest.fromBindLike(bt)).pipeTo(self)
+      bindAuthenticator.allowBind(BindRequest.fromBindLike(bt), null, null).pipeTo(self)
     case BindResponseSuccess(pdu) =>
       connection ! pdu
       context.become(bound(connection))

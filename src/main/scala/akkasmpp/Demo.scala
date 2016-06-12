@@ -10,17 +10,17 @@ import akkasmpp.actors.SmppClient.SendEnquireLink
 import akkasmpp.actors.SmppServer.Disconnected
 import akkasmpp.actors._
 import akkasmpp.protocol._
-import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest}
+import akkasmpp.protocol.auth.{BindAuthenticator, BindRequest, BindResponse}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object Demo extends App {
 
-  implicit val actorSystem = ActorSystem("demo")
+  implicit val actorSystem  = ActorSystem("demo")
   implicit val materializer = ActorMaterializer()
-  implicit val ec = actorSystem.dispatcher
-  val manager = IO(Tcp)
+  implicit val ec           = actorSystem.dispatcher
+  val manager               = IO(Tcp)
 
   val pduBuilder = new PduBuilder()
 
@@ -30,30 +30,39 @@ object Demo extends App {
   Http(actorSystem).bind("", port=1025).runForeach({ connection =>
     connection.flow
   })
-  */
+   */
 
-  actorSystem.actorOf(SmppServer.props(SmppServerConfig(new InetSocketAddress("0.0.0.0", 2775)), new SmppServerHandler {
+  actorSystem.actorOf(
+      SmppServer.props(
+          SmppServerConfig(new InetSocketAddress("0.0.0.0", 2775)),
+          new SmppServerHandler {
 
+        override val bindAuthenticator: BindAuthenticator =
+          new BindAuthenticator {
 
-    override val bindAuthenticator: BindAuthenticator = new BindAuthenticator {
-      override def allowBind(bindRequest: BindRequest) = {
-        Future.successful(
-          bindRequest.respondOk(Some(COctetString.utf8("akka-smpp-demo")))
-        )
-      }
-    }
+            override def allowBind(
+                bindRequest: BindRequest,
+                r: InetSocketAddress,
+                l: InetSocketAddress): Future[BindResponse] =
+              Future.successful(bindRequest.respondOk(COctetString.ascii("akka-smpp-demo")))
+          }
 
-
-    // XXX: split out into bound transmit vs bound receive
-    override def bound(connection: ActorRef): Receive = {
-      case el: EnquireLink => connection ! EnquireLinkResp(el.sequenceNumber)
-      case submit: SubmitSm => connection ! SubmitSmResp(CommandStatus.ESME_ROK, submit.sequenceNumber, Some(COctetString.utf8("1234-asdf")))
-      case SendEnquireLink => connection ! EnquireLink(sequenceNumberGen.next)
-      case Terminated(`connection`) | Disconnected =>
-        context.stop(self)
-      case x => println("got " + x)
-    }
-  }, printlnPduLogger("server")))
+        // XXX: split out into bound transmit vs bound receive
+        override def bound(connection: ActorRef): Receive = {
+          case el: EnquireLink =>
+            connection ! EnquireLinkResp(el.sequenceNumber)
+          case submit: SubmitSm =>
+            connection ! SubmitSmResp(CommandStatus.ESME_ROK,
+                                      submit.sequenceNumber,
+                                      Some(COctetString.utf8("1234-asdf")))
+          case SendEnquireLink =>
+            connection ! EnquireLink(sequenceNumberGen.next)
+          case Terminated(`connection`) | Disconnected =>
+            context.stop(self)
+          case x => println("got " + x)
+        }
+      },
+          printlnPduLogger("server")))
 
   // Demo Client
 
@@ -69,8 +78,7 @@ object Demo extends App {
     destinationAddr = COctetString.ascii("+181834234134"), shortMessage = OctetString.fromBytes(Array[Byte](0,0,0))))
 
   submitSmF.onComplete(println)
-  */
-
+   */
 
   /*
   c ? Bind("any", "any") onComplete { x =>
@@ -105,5 +113,4 @@ object Demo extends App {
 
     override def logIncoming(pdu: Pdu): Unit = println(s"$prefix IN : $pdu")
   }
-
 }

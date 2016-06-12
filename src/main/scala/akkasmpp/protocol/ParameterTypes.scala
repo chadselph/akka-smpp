@@ -450,7 +450,7 @@ object Tag extends FlexibleEnumeration {
   val language_indicator = Value(0x020D)
   val sar_total_segments = Value(0x020E)
   val sar_segment_seqnum = Value(0x020F)
-  val SC_interface_version = Value(0x0210)
+  val sc_interface_version = Value(0x0210)
   val callback_num_pres_ind = Value(0x0302)
   val callback_num_atag = Value(0x0303)
   val number_of_messages = Value(0x0304)
