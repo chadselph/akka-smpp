@@ -1,11 +1,13 @@
+package akkasmpp.testutil
+
 import akkasmpp.protocol.EsmClass.{Features, MessageType, MessagingMode}
 import akkasmpp.protocol.RegisteredDelivery.{IntermediateNotification, SmeAcknowledgement, SmscDelivery}
-import akkasmpp.protocol.{DeliverSmResp, CommandStatus, SubmitSmResp, DeliverSm, COctetString, DataCodingScheme, EsmClass, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, ServiceType, SubmitSm, TypeOfNumber}
+import akkasmpp.protocol.{COctetString, CommandStatus, DataCodingScheme, DeliverSm, DeliverSmResp, EsmClass, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, ServiceType, SubmitSm, SubmitSmResp, TypeOfNumber}
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
 
 /**
- * Created by chad on 8/11/14.
+  * scalacheck for SMPP PDUs
  */
 object PduGens {
 

@@ -3,13 +3,15 @@ package akkasmpp.extensions
 import java.net.InetSocketAddress
 
 import akka.NotUsed
-import akka.actor._
+import akka.actor.{ActorSystem, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
 import akka.io.Inet
 import akka.io.Inet.SocketOption
-import akka.stream.scaladsl._
-import akka.stream.{BidiShape, Materializer}
+import akka.stream.TLSProtocol.{SendBytes, SessionBytes, SslTlsInbound, SslTlsOutbound}
+import akka.stream.scaladsl.{BidiFlow, Flow, Keep, Source, TLS, TLSPlacebo, Tcp}
+import akka.stream.{Materializer, TLSRole}
 import akka.util.ByteString
 import akkasmpp.protocol.{Pdu, SmppPduFramingStage}
+import akkasmpp.ssl.TlsContext
 import com.typesafe.config.Config
 
 import scala.collection.immutable
@@ -22,26 +24,33 @@ import scala.concurrent.duration._
 class SmppExt(config: Config)(implicit system: ActorSystem)
     extends akka.actor.Extension {
 
-  type ServerLayer = BidiFlow[Pdu, ByteString, ByteString, Pdu, NotUsed]
+  type SmppShape = BidiFlow[Pdu, SslTlsOutbound, SslTlsInbound, Pdu, NotUsed]
 
-  private val blueprint = BidiFlow.fromGraph(GraphDSL.create() { builder =>
-    val output = builder.add(Flow[Pdu].map(_.toByteString))
-    val input = builder.add(new SmppPduFramingStage(config))
-    BidiShape.fromFlows(output, input)
-  })
+  val protocolLayer = BidiFlow.fromFlows(
+      Flow[Pdu].map(_.toByteString), new SmppPduFramingStage(config))
+  val tlsSupport: BidiFlow[
+      ByteString, SslTlsOutbound, SslTlsInbound, ByteString, NotUsed] =
+    BidiFlow.fromFlows(
+        Flow[ByteString].map(SendBytes), Flow[SslTlsInbound].collect {
+      case x: SessionBytes ⇒ x.bytes
+    })
+  val blueprint = protocolLayer.atop(tlsSupport)
 
   import Smpp._
   def listen(interface: String,
              port: Int = 2775,
              backlog: Int = 100,
              options: immutable.Traversable[Inet.SocketOption] = Nil,
+             tlsContext: Option[TlsContext] = None,
              idleTimeout: Duration = Duration.Inf)(implicit fm: Materializer)
     : Source[IncomingConnection, Future[ServerBinding]] = {
     val tcpConnections =
       Tcp().bind(interface, port, backlog, options, idleTimeout = idleTimeout)
     tcpConnections.map {
       case Tcp.IncomingConnection(localAddress, remoteAddress, flow) =>
-        IncomingConnection(localAddress, remoteAddress, blueprint.join(flow))
+        val sslStage = sslTlsStage(tlsContext, TLSRole.server)
+        IncomingConnection(
+            localAddress, remoteAddress, blueprint.atop(sslStage).join(flow))
     }
   }.mapMaterializedValue {
     _.map(tcpBinding =>
@@ -54,6 +63,7 @@ class SmppExt(config: Config)(implicit system: ActorSystem)
               options: immutable.Traversable[SocketOption] = Nil,
               halfClose: Boolean = true,
               connectTimeout: Duration = Duration.Inf,
+              tlsContext: Option[TlsContext] = None,
               idleTimeout: Duration = Duration.Inf)(implicit fm: Materializer)
     : Flow[Pdu, Pdu, Future[OutgoingConnection]] = {
 
@@ -63,7 +73,12 @@ class SmppExt(config: Config)(implicit system: ActorSystem)
                                               halfClose,
                                               connectTimeout,
                                               idleTimeout)
+    val sslStage = sslTlsStage(
+        tlsContext,
+        TLSRole.client,
+        Some((remoteAddress.getHostString, remoteAddress.getPort)))
     blueprint
+      .atop(sslStage)
       .joinMat(connection)(Keep.right)
       .mapMaterializedValue(
           // XXX: maybe just use the Tcp.OutgoingConnection? is there actually a reason to wrap it?
@@ -71,6 +86,16 @@ class SmppExt(config: Config)(implicit system: ActorSystem)
                 OutgoingConnection(tcp.remoteAddress, tcp.localAddress))(
               fm.executionContext))
   }
+
+  /** Creates real or placebo SslTls stage based on if ConnectionContext is HTTPS or not. */
+  private def sslTlsStage(connectionContext: Option[TlsContext],
+                          role: TLSRole,
+                          hostInfo: Option[(String, Int)] = None) =
+    connectionContext match {
+      case Some(tsc: TlsContext) =>
+        TLS(tsc.sslContext, tsc.sslConfig, tsc.firstSession, role, hostInfo = hostInfo)
+      case None ⇒ TLSPlacebo()
+    }
 }
 
 object Smpp extends ExtensionId[SmppExt] with ExtensionIdProvider {

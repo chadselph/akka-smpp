@@ -1,4 +1,6 @@
-import akka.util.{ByteIterator, ByteStringBuilder, ByteString}
+package akkasmpp.testutil
+
+import akka.util.{ByteIterator, ByteString, ByteStringBuilder}
 
 trait ByteStringHelpers {
   def byteStringFromByte(b: Byte) = ByteString.fromArray(Array(b))
