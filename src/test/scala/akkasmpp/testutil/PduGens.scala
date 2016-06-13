@@ -2,7 +2,7 @@ package akkasmpp.testutil
 
 import akkasmpp.protocol.EsmClass.{Features, MessageType, MessagingMode}
 import akkasmpp.protocol.RegisteredDelivery.{IntermediateNotification, SmeAcknowledgement, SmscDelivery}
-import akkasmpp.protocol.{COctetString, CommandStatus, DataCodingScheme, DeliverSm, DeliverSmResp, EsmClass, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, ServiceType, SubmitSm, SubmitSmResp, TypeOfNumber}
+import akkasmpp.protocol.{BindLike, BindReceiver, BindTransceiver, BindTransmitter, COctetString, CommandStatus, DataCodingScheme, DeliverSm, DeliverSmResp, EnquireLink, EnquireLinkResp, EsmClass, NullTime, NumericPlanIndicator, OctetString, Priority, RegisteredDelivery, ServiceType, SubmitSm, SubmitSmResp, TypeOfNumber}
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
 
@@ -91,6 +91,32 @@ object PduGens {
 
   } yield DeliverSmResp(commandStatus, seqN, msgIdO)
 
-  val pduGen = Gen.oneOf(submitSmGen, deliverSmGen, submitSmRespGen, deliverSmRespGen)
+  val enquireLinkGen = for {
+    seqN <- arbitrary[Int]
+  } yield EnquireLink(seqN)
+
+  val enquireLinkRespGen = for {
+    seqN <- arbitrary[Int]
+  } yield EnquireLinkResp(seqN)
+
+  def bindGen[BindType <: BindLike](constructor: BindLike.Constructor[BindType]): Gen[BindType] = {
+    for {
+      seqN <- arbitrary[Int]
+      systemId <- strGenToCOctetGen(arbitrary[String])
+      password <- strGenToCOctetGen(arbitrary[String])
+      systemType <- strGenToCOctetGen(arbitrary[String])
+      typeOfNumber <- Gen.oneOf(TypeOfNumber.values.toSeq)
+      numericPlanIndicator <- Gen.oneOf(NumericPlanIndicator.values.toSeq)
+      addressRange <- strGenToCOctetGen(arbitrary[String])
+    } yield constructor(seqN, systemId, password, systemType, 0x34.toByte, typeOfNumber, numericPlanIndicator, addressRange)
+  }
+
+  val bindReceiverGen = bindGen(BindReceiver)
+  val bindTransceiverGen = bindGen(BindTransceiver)
+  val bindTransmitterGen = bindGen(BindTransmitter)
+
+
+  val pduGen = Gen.oneOf(submitSmGen, deliverSmGen, submitSmRespGen, deliverSmRespGen,
+    enquireLinkGen, enquireLinkRespGen, bindReceiverGen, bindTransmitterGen, bindTransceiverGen)
 
 }

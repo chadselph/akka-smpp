@@ -54,6 +54,18 @@ sealed trait BindLike extends Pdu with NullCommandStatus with WritePdu.BindWrite
   def addressRange: COctetString
 }
 
+object BindLike {
+  type Constructor[B <: BindLike] = (
+    SmppTypes.Integer,
+    COctetString,
+    COctetString,
+    COctetString,
+    Byte,
+    TypeOfNumber,
+    NumericPlanIndicator,
+    COctetString) => B
+}
+
 sealed trait BindRespLike extends Pdu with WritePdu.BindRespWriter with SmscResponse {
   def systemId: Option[COctetString]
   def scInterfaceVersion: Option[Tlv]
