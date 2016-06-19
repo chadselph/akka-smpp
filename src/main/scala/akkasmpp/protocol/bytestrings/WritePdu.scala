@@ -54,7 +54,7 @@ object WritePdu {
       bsb.putByte(interfaceVersion)
       bsb.putTypeOfNumber(addrTon)
       bsb.putNumberPlanIndicator(addrNpi)
-      bsb.putCOctetString(COctetString.empty)  // addressRange
+      bsb.putCOctetString(addressRange)
       bsb.result()
     }
   }
