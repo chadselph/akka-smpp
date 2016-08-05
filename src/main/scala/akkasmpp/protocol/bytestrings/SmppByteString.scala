@@ -104,7 +104,7 @@ object SmppByteString {
     def getTypeOfNumber = TypeOfNumber(bi.getByte)
     def getNumericPlanIndicator = NumericPlanIndicator(bi.getByte)
     def getPriority = Priority.getOrInvalid(bi.getByte)
-    def getDataCodingScheme = DataCodingScheme(bi.getByte & 0xf)
+    def getDataCodingScheme = DataCodingScheme.getOrInvalid(bi.getByte & 0xf)
     def getMessageState = MessageState(bi.getByte)
     def getServiceType = bi.getCOctetString
     def getEsmClass = EsmClass(bi.getByte)

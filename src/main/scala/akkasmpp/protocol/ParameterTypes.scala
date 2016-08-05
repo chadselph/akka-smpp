@@ -386,7 +386,7 @@ case class RegisteredDelivery(smscDelivery: SmscDelivery = RegisteredDelivery.Sm
                               smeAcknowledgement: SmeAcknowledgement = RegisteredDelivery.SmeAcknowledgement.NoneRequested,
                               intermediateNotification: IntermediateNotification = RegisteredDelivery.IntermediateNotification.NotRequested)
 
-object DataCodingScheme extends Enumeration {
+object DataCodingScheme extends FlexibleEnumeration {
   type DataCodingScheme = Value
 
   val SmscDefaultAlphabet = Value(0)
