@@ -33,32 +33,47 @@ object CliSmpp extends App {
     """.stripMargin
 
   def receiveCallback: SmppClient.ClientReceive = {
+    // ack messages so they don't repeat
+    case sms: DeliverSm => DeliverSmResp(CommandStatus.ESME_ROK, sms.sequenceNumber, None )
     case p: Pdu => GenericNack(CommandStatus.ESME_RINVSYSTYP, p.sequenceNumber)
   }
+
   val logger = new PduLogger {
     override def logIncoming(pdu: Pdu): Unit = println("Incoming: " + pdu)
     override def logOutgoing(pdu: Pdu): Unit = println("Sending : " + pdu)
   }
 
-  def getDest() = COctetString.ascii("+15094302095")
+  def getDest(num: String= "+15094302095") = COctetString.ascii(num)
 
-  def getSrc() = COctetString.ascii("+12512161914")
 
-  def getShortMsg() = OctetString.fromBytes(DefaultGsmCharset.encode("This was a triumph."))
+  def getShortMsg(msg: String = "This was a triumph.") = OctetString.fromBytes(DefaultGsmCharset.encode(msg))
 
   val pduBuilder = new PduBuilder()
 
-  case class RunConfig(server: String, port: Int, ssl: Boolean) {
+  case class RunConfig(
+      server: String = "localhost",
+      port: Int = 2775,
+      ssl: Boolean= false, 
+      systemId: String = "someasfd",
+      password: String = "asfd",
+      shortCode: COctetString = COctetString.ascii("+12512161914")) {
     val addr = new InetSocketAddress(server, port)
   }
 
   val rc = args match {
-    case Array(server, port) if port.forall(_.isDigit) =>
-      RunConfig(server, port.toInt, false)
+    // Preserving compatibility
     case Array(server, port, "--ssl") if port.forall(_.isDigit) =>
       RunConfig(server, port.toInt, true)
-    case Array(server) => RunConfig(server, 2775, false)
-    case Array() => RunConfig("localhost", 2775, false)
+    // Adding sysID, pwd and shortcode, so this can be bundled in a test tool and used on 
+    // multiple binds without recompiling. 
+    case Array(server, port, systemId, password, shortCode) if port.forall(_.isDigit) =>
+      RunConfig(server, port.toInt, false, systemId, password, COctetString.ascii(shortCode))
+    case Array(server, port, systemId, password) if port.forall(_.isDigit) =>
+      RunConfig(server, port.toInt, false, systemId, password)
+    case Array(server, port) if port.forall(_.isDigit) =>
+      RunConfig(server, port.toInt, false )
+    case Array(server) => RunConfig(server)
+    case Array() => RunConfig()
   }
 
   case object UserInput
@@ -80,26 +95,29 @@ object CliSmpp extends App {
       case UserInput =>
         self ! Console.readLine("==> ").trim
       case "bt" =>
-        client ! Bind("someasfd", "asfd", mode = SmppClient.Transmitter)
+        client ! Bind(rc.systemId, rc.password, mode = SmppClient.Transmitter)
         self ! UserInput
       case "br" =>
-        client ! Bind("someasfd", "asfd", mode = SmppClient.Receiver)
+        client ! Bind(rc.systemId, rc.password, mode = SmppClient.Receiver)
         self ! UserInput
       case "bx" =>
-        client ! Bind("someasfd", "asfd", mode = SmppClient.Transceiver)
+        client ! Bind(rc.systemId, rc.password, mode = SmppClient.Transceiver)
         self ! UserInput
       case "ss" =>
-        client ! SendPdu(pduBuilder.submitSm(destinationAddr = getDest(), sourceAddr = getSrc(),
-          shortMessage = getShortMsg(), serviceType=COctetString.ascii("twilio")))
+        val dest = Console.readLine("To? ").trim
+        val msg = Console.readLine("Msg? ").trim
+        client ! SendPdu(pduBuilder.submitSm(destinationAddr = getDest(dest), sourceAddr = rc.shortCode,
+          shortMessage = getShortMsg(msg)
+          ))
         self ! UserInput
       case "el" =>
         client ! SendPdu(EnquireLink)
         self ! UserInput
       case "xx" => self ! UserInput
       case "" => self ! UserInput
+      case "q" => doStop()
       case _: String => println(menu)
         self ! UserInput
-      case "q" => doStop()
     }
 
     def doStop(): Unit = {
@@ -114,3 +132,4 @@ object CliSmpp extends App {
   println(menu)
 
 }
+
