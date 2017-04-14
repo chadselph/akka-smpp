@@ -5,15 +5,14 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.util.ByteString
-import org.scalatest.{FunSuite, ShouldMatchers}
-
+import org.scalatest.{FunSuite, Matchers}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
 /**
   * akka stream tests
   */
-class SmppPduFramingStageTest extends FunSuite with ShouldMatchers {
+class SmppPduFramingStageTest extends FunSuite with Matchers {
 
   val testConfig = com.typesafe.config.ConfigFactory.parseString(
     """

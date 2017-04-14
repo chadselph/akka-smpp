@@ -1,7 +1,7 @@
 package akkasmpp.demos
 
 import java.net.InetSocketAddress
-
+import scala.concurrent.Await
 import akka.actor.SupervisorStrategy.Stop
 import akka.actor._
 import akka.stream.ActorMaterializer
@@ -10,7 +10,6 @@ import akkasmpp.actors.{SmppClient, SmppClientConfig}
 import akkasmpp.extensions.Smpp
 import akkasmpp.protocol._
 import akkasmpp.userdata.DefaultGsmCharset
-
 import scala.concurrent.duration._
 
 /**
@@ -106,7 +105,9 @@ object CliSmpp extends App {
       println("shutting down...")
       context.stop(self)
       mat.shutdown()
-      actorSystem.shutdown()
+      actorSystem.terminate()
+      import scala.concurrent.duration._
+      Await.result(actorSystem.whenTerminated, 30.seconds)
 
     }
   }))
