@@ -2,7 +2,6 @@ package akkasmpp
 
 import java.net.InetSocketAddress
 import javax.net.ssl.SSLContext
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
@@ -11,9 +10,8 @@ import akkasmpp.extensions.Smpp.ServerBinding
 import akkasmpp.protocol.{BindTransceiver, BindTransceiverResp, COctetString, CommandStatus, Pdu, PduBuilder}
 import akkasmpp.ssl.TlsContext
 import akkasmpp.testutil.ByteStringHelpers
-import org.scalatest.concurrent.AsyncAssertions
-import org.scalatest.{FlatSpec, Matchers, ShouldMatchers}
-
+import org.scalatest.concurrent.{AsyncAssertions, Waiters}
+import org.scalatest.{FlatSpec, Matchers}
 import scala.concurrent.duration._
 
 /**
@@ -21,10 +19,9 @@ import scala.concurrent.duration._
   */
 class EndToEndBindTest
     extends FlatSpec
-    with ShouldMatchers
     with Matchers
     with ByteStringHelpers
-    with AsyncAssertions {
+    with Waiters {
 
   implicit val pc = new PatienceConfig(timeout = 2.seconds)
   implicit val as  = ActorSystem()

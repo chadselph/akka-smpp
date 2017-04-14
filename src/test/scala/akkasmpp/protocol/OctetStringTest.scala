@@ -2,9 +2,9 @@ package akkasmpp.protocol
 
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FunSpec, ShouldMatchers}
+import org.scalatest.{FunSpec, Matchers}
 
-class OctetStringTest extends FunSpec with ShouldMatchers with GeneratorDrivenPropertyChecks {
+class OctetStringTest extends FunSpec with Matchers with GeneratorDrivenPropertyChecks {
 
   describe("OctetString") {
     it ("should pattern match empty") {
