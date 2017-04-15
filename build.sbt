@@ -2,8 +2,6 @@ name := "akka-smpp"
 
 organization := "me.chadrs"
 
-version := "0.4.0-SNAPSHOT"
-
 scalaVersion := "2.12.1"
 
 crossScalaVersions := Seq("2.11.9", "2.12.1")
