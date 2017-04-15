@@ -56,7 +56,7 @@ object CliSmpp extends App {
       ssl: Boolean= false, 
       systemId: String = "someasfd",
       password: String = "asfd",
-      shortCode: COctetString = COctetString.ascii("+12512161914")) {
+      sourceAddress: COctetString = COctetString.ascii("+12512161914")) {
     val addr = new InetSocketAddress(server, port)
   }
 
@@ -64,10 +64,10 @@ object CliSmpp extends App {
     // Preserving compatibility
     case Array(server, port, "--ssl") if port.forall(_.isDigit) =>
       RunConfig(server, port.toInt, true)
-    // Adding sysID, pwd and shortcode, so this can be bundled in a test tool and used on 
+    // Adding sysID, pwd and sourceAddress, so this can be bundled in a test tool and used on 
     // multiple binds without recompiling. 
-    case Array(server, port, systemId, password, shortCode) if port.forall(_.isDigit) =>
-      RunConfig(server, port.toInt, false, systemId, password, COctetString.ascii(shortCode))
+    case Array(server, port, systemId, password, sourceAddress) if port.forall(_.isDigit) =>
+      RunConfig(server, port.toInt, false, systemId, password, COctetString.ascii(sourceAddress))
     case Array(server, port, systemId, password) if port.forall(_.isDigit) =>
       RunConfig(server, port.toInt, false, systemId, password)
     case Array(server, port) if port.forall(_.isDigit) =>
@@ -106,7 +106,7 @@ object CliSmpp extends App {
       case "ss" =>
         val dest = Console.readLine("To? ").trim
         val msg = Console.readLine("Msg? ").trim
-        client ! SendPdu(pduBuilder.submitSm(destinationAddr = getDest(dest), sourceAddr = rc.shortCode,
+        client ! SendPdu(pduBuilder.submitSm(destinationAddr = getDest(dest), sourceAddr = rc.sourceAddress,
           shortMessage = getShortMsg(msg)
           ))
         self ! UserInput
