@@ -21,5 +21,5 @@ libraryDependencies ++= Seq(
 
 javacOptions in Compile ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint:unchecked", "-Xlint:deprecation")
 
-net.virtualvoid.sbt.graph.Plugin.graphSettings
+licenses += ("Apache-2.0" -> url("https://opensource.org/licenses/Apache-2.0"))
 
