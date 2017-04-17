@@ -5,6 +5,18 @@ Currently this is pretty bare-bones; constants have been mostly defined.
 Case classes exist for all the PDUs. Parsing PDUs from TCP and
 serializing them works.
 
+## Installing with sbt
+
+The artifacts are currently just hosted on my bintray; cross-built for Scala 2.11 and 2.12.
+
+```
+resolvers += Resolver.bintrayRepo("chadselph", "maven")
+
+libraryDependencies +=  "me.chadrs" %% "akka-smpp" % "0.4.1"
+```
+
+should do the trick.
+
 ## Example Usage
 
 SMPP is implemented as an akka extension and is inspired by akka-http/spray.
@@ -116,6 +128,15 @@ became a pain point of using the API. Instead, reasonable defaults now live in t
   val builder = new PduBuilder(defaultTypeOfNumber = TypeOfNumber.International) // override any defaults you want in here with by-name parameters
   builder.submitSm(sourceAddr = source, destinationAddr = dest, shortMessage = msg) // also lets you override anything
 ```
+
+## Is it "production ready"?
+
+Probably not. It has been used for internal tools and load testing, but as far as I know,
+not in any production scale, customer-facing systems. Because it has been used as a tool
+for inter-op testing, it has successfully parsed and sent PDUs to/from around one hundred
+carriers / SMS aggregators.
+
+If you've used it to build something bigger, feel free to reach out and let me know what problems you ran into.
 
 # Similar Projects
 There already exist several SMPP libraries in Java. To my knowledge, this is the only one in Scala.
